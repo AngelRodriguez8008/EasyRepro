@@ -89,7 +89,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             var redirect = false;
             bool online = !(this.OnlineDomains != null && !this.OnlineDomains.Any(d => uri.Host.EndsWith(d)));
             driver.Navigate().GoToUrl(uri);
-
+            
             if (online)
             {
                 if (driver.IsVisible(By.Id("use_another_account_link")))
@@ -104,7 +104,6 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
                 Thread.Sleep(1000);
 
-                //Check if account selection screen is present (AAD vs MSA accounts)
                 if (driver.IsVisible(By.Id("aadTile")))
                 {
                     driver.FindElement(By.Id("aadTile")).Click(true);
@@ -128,10 +127,15 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
                     driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).SendKeys(Keys.Tab);
                     driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).Submit();
 
+                    Thread.Sleep(2000);
+
                     if (driver.IsVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
                     {
                         driver.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]));
-                        driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])).Submit();
+                        
+                        //Click didn't work so use submit
+                        if(driver.HasElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
+                            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])).Submit();
                     }
 
                     driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
@@ -139,6 +143,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
                         e => 
                         {
                             e.WaitForPageToLoad();
+                            MarkOperation(driver);
                             e.SwitchTo().Frame(0);
                             e.WaitForPageToLoad();
                         },
@@ -147,6 +152,39 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             }
 
             return redirect ? LoginResult.Redirect : LoginResult.Success;
+        }
+
+        private void MarkOperation(IWebDriver driver)
+        {
+            if (driver.HasElement(By.Id(Elements.ElementId[Reference.Login.TaggingId])))
+                driver.ExecuteScript($"document.getElementById('{Elements.ElementId[Reference.Login.TaggingId]}').src = '_imgs/NavBar/Invisible.gif?operation=easyrepro|web|{Guid.NewGuid().ToString()}';");
+        }
+
+        public void ADFSLoginAction(LoginRedirectEventArgs args)
+
+        {
+            //Login Page details go here.  You will need to find out the id of the password field on the form as well as the submit button. 
+            //You will also need to add a reference to the Selenium Webdriver to use the base driver. 
+            //Example
+
+            var d = args.Driver;
+
+            d.FindElement(By.Id("passwordInput")).SendKeys(args.Password.ToUnsecureString());
+            d.ClickWhenAvailable(By.Id("submitButton"), new TimeSpan(0, 0, 2));
+
+            //Insert any additional code as required for the SSO scenario
+
+            //Wait for CRM Page to load
+            d.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
+                , new TimeSpan(0, 0, 60),
+            e =>
+            {
+                e.WaitForPageToLoad();
+                e.SwitchTo().Frame(0);
+                e.WaitForPageToLoad();
+            },
+                f => { throw new Exception("Login page failed."); });
+
         }
     }
 }

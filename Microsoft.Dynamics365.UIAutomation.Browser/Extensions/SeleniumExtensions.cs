@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Web.Script.Serialization;
 
 namespace Microsoft.Dynamics365.UIAutomation.Browser
@@ -33,7 +34,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             return driver;
         }
 
-        public static void Click(this IWebElement element, bool ignoreStaleElementException = false)
+        public static void Click(this IWebElement element, bool ignoreStaleElementException = true)
         {
             try
             {
@@ -43,6 +44,20 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             {
                 if (!ignoreStaleElementException)
                     throw ex;
+            }
+        }
+
+        public static void Hover(this IWebElement Element, IWebDriver driver, bool ignoreStaleElementException = true)
+        {
+            try
+            {
+                Actions action = new Actions(driver);
+                action.MoveToElement(Element).Build().Perform();
+            }
+            catch (StaleElementReferenceException)
+            {
+                if (!ignoreStaleElementException)
+                    throw;
             }
         }
 
@@ -58,7 +73,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             WaitUntilClickable(driver,
                                 by,
                                 timeout,
-                                d => { element.Click(); },
+                                d => { element.Click(true); },
                                 e => { throw new InvalidOperationException($"Unable to click element."); });
 
 
@@ -229,6 +244,11 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             return driver.FindElement(By.TagName("body")).Text;
         }
 
+        public static bool HasAttribute(this IWebElement element, string attributeName)
+        {
+            return element.GetAttribute(attributeName) == null ? false : true;
+        }
+
         public static bool HasElement(this IWebDriver driver, By by)
         {
             try
@@ -237,6 +257,46 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             }
             catch (NoSuchElementException)
             {
+                return false;
+            }
+        }
+
+        public static bool HasElement(this IWebElement element, By by)
+        {
+            try
+            {
+                return element.FindElements(by).Count > 0;
+            }
+            catch (NoSuchElementException)
+            {
+                return false;
+            }
+        }
+
+        public static bool TryFindElement(this IWebDriver driver, By by, out IWebElement element)
+        {
+            try
+            {
+                element = driver.FindElement(by);
+                return true;
+            }
+            catch (NoSuchElementException)
+            {
+                element = null;
+                return false;
+            }
+        }
+
+        public static bool TryFindElement(this IWebElement element, By by, out IWebElement foundElement)
+        {
+            try
+            {
+                foundElement = element.FindElement(by);
+                return true;
+            }
+            catch (NoSuchElementException)
+            {
+                foundElement = null;
                 return false;
             }
         }
@@ -279,9 +339,12 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             if (clear)
             {
                 element.Clear();
+                element.SendKeys(value);
             }
-
-            element.SendKeys(value);
+            else
+            {
+                element.SendKeys(value);
+            }
         }
 
         public static bool AlertIsPresent(this IWebDriver driver)
@@ -317,6 +380,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
         public static IWebDriver LastWindow(this IWebDriver driver)
         {
             return driver.SwitchTo().Window(driver.WindowHandles.Last());
+        }
+
+        /// <summary>Clears the focus from all elements.</summary>
+        /// <param name="driver">The driver.</param>
+        public static void ClearFocus(this IWebDriver driver)
+        {
+            driver.FindElement(By.TagName("body")).Click();
         }
 
         #endregion Elements

@@ -29,7 +29,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.Web.FormJS
             using (var xrmBrowser = new Api.Browser(options))
             {
                 xrmBrowser.LoginPage.Login(_xrmUri, _username, _password);
-             
+                
                 xrmBrowser.ThinkTime(500);
                 xrmBrowser.Navigation.OpenSubArea("Sales", "Accounts");
 

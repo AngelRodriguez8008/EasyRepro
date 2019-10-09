@@ -11,11 +11,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
         {
             //Business Process Flow
             { "BPF_NextStage"       , "id(\"stageAdvanceActionContainer\")/div"},
+            { "BPF_NextStageMenu"       , "id(\"stageNavigateActionContainer\")/div"},
+            { "BPF_NextStageMenuOptions"       , "//div[@class=\"navigateMenuSection\"]"},
             { "BPF_PreviousStage"   , "id(\"stageBackActionContainer\")/div"},
             { "BPF_Hide"            , "id(\"processControlCollapseButton\")" },
             { "BPF_SetActive"       , "id(\"stageSetActiveActionContainer\")" },
+            { "BPF_Finish"       , "id(\"stageFinishActionContainer\")" },
+            { "BPF_FinishedLabel"       , "//div[@class=\"finishLabelContainer\"]" },
             { "BPF_SelectStage"     , "id(\"stage_[STAGENUM]\")/div[2]/div/div/div/span" },
             { "BPF_Ok"     , "id(\"SwitchProcess-Select\")" },
+            { "BPF_TextFieldContainer"     , "//div[@id=\"header_process_[NAME]\"]" },
+            { "BPF_CheckboxFieldContainer"     , "//div[@id=\"header_process_[NAME]\"]" },
+            { "BPF_OptionSetFieldContainer"     , "//div[@id=\"header_process_[NAME]\"]" },
+            { "BPF_LookupFieldContainer"     , "//div[@id=\"header_process_[NAME]\"]" },
+            { "BPF_DateFieldContainer"     , "//div[@id=\"header_process_[NAME]\"]" },
+            { "BPF_DateFieldInput"     , "//input[@id=\"header_process_[NAME]_iDateInput\"]" },
+            { "BPF_GetLookupSearchIcon"     , "//div[@id=\"header_process_[NAME]_lookupSearchIconDiv\"]" },
 
             //Dialogs
             { "Dialog_Header"       , "id(\"dialogHeaderTitle\")"},
@@ -45,6 +56,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Dialog_RoleLookupTable",   "id(\"record2roleid_IMenu\")" },
             { "Dialog_WarningFooter" , "//*[@id=\"crmDialogFooter\"]" },
             { "Dialog_WarningCloseButton", "//*[@id=\"butBegin\"]" },
+            { "Dialog_CloseFoundPlaces", "//span[contains(text(), 'Close')]"},
            
 
             //GuidedHelp
@@ -72,6 +84,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Nav_AppsForCrm"       , "id(\"navTabButtonSettingsNavAppsForCrmId\")"},
             { "Nav_WelcomeScreen"       , "id(\"navTabButtonSettingsNavTourId\")"},
             { "Nav_About"       , "id(\"navTabButtonSettingsAboutId\")"},
+            { "Nav_AboutVersionText"       , "//span[contains(text(), 'Version')]"},
             { "Nav_OptOutLP"       , "id(\"navTabButtonSettingsGuidedHelpId\")"},
             { "Nav_Privacy"       , "id(\"NodeSettingsPrivacyStatementId\")"},
             { "Nav_UserInfo"       , "id(\"navTabButtonUserInfoLinkId\")"},
@@ -108,7 +121,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Grid_FindCriteria"       , "id(\"crmGrid_findCriteria\")"},
             { "Grid_GridBodyTable"   , "id(\"gridBodyTable\")" },
             { "Grid_GridBodyTable_Row", "tbody/tr" },
-            { "Grid_GridBodyTable_RowSpan", "descendant::span[not(ancestor::a) and not(descendant::a)]"},
+            { "Grid_GridBodyTable_RowCheckbox", "td[1]"},
             { "Grid_DefaultViewIcon"   , "id(\"defaultViewIcon\")" },
             { "Grid_ViewSelector"   , "id(\"crmGrid_SavedNewQuerySelector\")" },
             { "Grid_Refresh"   , "id(\"grid_refresh\")" },
@@ -124,6 +137,46 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Entity_SelectForm",  "id(\"header_crmFormSelector\")"}, //GitHub Issue #56 - Correcting reference point for SelectForm() method
             { "Entity_SelectFormSection",  "id(\"FormSecNavigationControl-Icon\")"}, //GitHub Issue 56
             { "Entity_TabId"       , "//a/*[contains(text(),'[NAME]')]/parent::a"}, //GitHub Issue 124
+            { "Entity_FieldContainer"       , "//div[contains(@id,'[NAME]')]"},
+            { "Entity_TextFieldContainer"     , "//div[@id=\"[NAME]\"]" },
+            { "Entity_CheckboxFieldContainer"     , "//div[@id=\"[NAME]\"]" },
+            { "Entity_TwoOptionFieldList", "//select[@id=\"[NAME]_i\"]" },
+            { "Entity_TwoOptionFieldListOption", "//select[@id=\"[NAME]_i\"]//option[@value=\"[VALUE]\"]" },
+            { "Entity_TwoOptionFieldTd", "//td[@id=\"[NAME]_d\"]" },
+            { "Entity_TwoOptionFieldCheckbox", "//input[@id=\"[NAME]_i\"]" },
+            { "Entity_OptionSetFieldContainer"     , "//div[@id=\"[NAME]\"]" },
+            { "Entity_LookupFieldContainer"     , "//div[@id=\"[NAME]\"]" },
+            { "Entity_LookupFieldTd"     , "//td[@id=\"[NAME]_d\"]" },
+            { "Entity_LookupFieldInput"     , "//input[@id=\"[NAME]_ledit\"]" },
+            { "Entity_DateFieldContainer"     , "//div[@id=\"[NAME]\"]" },
+            { "Entity_DateFieldInput"     , "//input[@id=\"[NAME]_iDateInput\"]" },
+            { "Entity_GetLookupSearchIcon"     , "//div[@id=\"[NAME]_lookupSearchIconDiv\"]" },
+            { "Entity_Header_TextFieldContainer"     , "//div[@id=\"header_[NAME]\"]" },
+            { "Entity_Header_CheckboxFieldContainer"     , "//div[@id=\"header_[NAME]\"]" },
+            { "Entity_Header_TwoOptionFieldList", "//select[@id=\"header_[NAME]_i\"]" },
+            { "Entity_Header_TwoOptionFieldListOption", "//select[@id=\"header_[NAME]_i\"]//option[@value=\"[VALUE]\"]" },
+            { "Entity_Header_TwoOptionFieldDiv", "//div[@id=\"header_[NAME]_d\"]" },
+            { "Entity_Header_TwoOptionFieldCheckbox", "//input[@id=\"header_[NAME]_i\"]" },
+            { "Entity_Header_OptionSetFieldContainer"     , "//div[@id=\"header_[NAME]\"]" },
+            { "Entity_Header_LookupFieldContainer"     , "//div[@id=\"header_[NAME]\"]" },
+            { "Entity_Header_DateFieldContainer"     , "//div[@id=\"header_[NAME]\"]" },
+            { "Entity_Header_DateFieldInput"     , "//input[@id=\"header_[NAME]_iDateInput\"]" },
+            { "Entity_Header_GetLookupSearchIcon"     , "//div[@id=\"header_[NAME]_lookupSearchIconDiv\"]" },
+            { "Entity_Footer_TextFieldContainer"     , "//div[@id=\"footer_[NAME]\"]" },
+            { "Entity_Footer_CheckboxFieldContainer"     , "//div[@id=\"footer_[NAME]\"]" },
+            { "Entity_Footer_TwoOptionFieldTd", "//td[@id=\"footer_[NAME]_d\"]" },
+            { "Entity_Footer_TwoOptionFieldCheckbox", "//input[@id=\"footer_[NAME]_i\"]" },
+            { "Entity_Footer_OptionSetFieldContainer"     , "//div[@id=\"footer_[NAME]\"]" },
+            { "Entity_Footer_LookupFieldContainer"     , "//div[@id=\"footer_[NAME]\"]" },
+            { "Entity_Footer_DateFieldContainer"     , "//div[@id=\"footer_[NAME]\"]" },
+            { "Entity_Footer_DateFieldInput"     , "//input[@id=\"footer_[NAME]_iDateInput\"]" },
+            { "Entity_Footer_GetLookupSearchIcon"     , "//div[@id=\"footer_[NAME]_lookupSearchIconDiv\"]" },
+            { "Entity_SubGrid"                      ,"//span[@id='[NAME]_span' and @type='subgrid']" },
+            { "Entity_SubGrid_HeaderCell"           ,"//div[@id='[NAME]_divDataArea']/div/table/thead/tr/th" },
+            { "Entity_SubGrid_Row"                  ,"//div[@id='[NAME]_divDataArea']/div/table/tbody/tr" },
+            { "Entity_SubGrid_Cell"                 ,"//div[@id='[NAME]_divDataArea']/div/table/tbody/tr/td" },
+            { "Entity_SubGrid_RowDeleteButton"      ,"//a[contains(@id,'gridBodyTable_delete_[RECORDID]')]" },
+            { "Entity_SubGrid_ItemsTotal"           ,"//span[@id='[NAME]_ItemsTotal']" },
 
             //Related MenuItems
             { "Related_Popout",                 "//li[contains(@data-id,\"tablist-tab_related\")]" },
@@ -151,7 +204,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Search_Filter"       , "id(\"filterCombo\")"},
             { "Search_Text"       , "id(\"searchTextBox\")"},
             { "Search_Button"       , "id(\"SearchButton\")"},
-            { "Search_Result"       , "id(\"entityDiv_1\")"},
+            { "Search_Result"       , "//*[contains(@id,\"entityDiv\")]"},
             { "Search_Container"       , "id(\"panoramaContainer\")"},
 
             //DashBoard
@@ -214,9 +267,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "LookUp_SavedQuerySelector", "id(\"crmGrid_SavedQuerySelector\")"},
             { "LookUp_DialogCancel", "id(\"cmdDialogCancel\")"},
             { "LookUp_New", "id(\"btnNew\")"},
-            { "LookUp_Remove", "id(\"btnRemove\")"},
+            { "LookUp_Remove", "id(\"btnRemoveValue\")"},
             { "LookUp_Add", "id(\"btnAdd\")"},
             { "LookUp_Begin", "id(\"butBegin\")"},
+            { "LookUp_Search", "input(\"crmGrid_findCriteria\")"},
 
             //Reports
             { "Report_Close", "id(\"btnCancel\")"},
@@ -322,6 +376,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             { "Process_Category", "WorkflowCategory"},
             { "Process_Entity", "PrimaryEntity"},
 
+            //Login
+            { "Login_TaggingId", "navTabAppSwitcherImage_TabAppSwitcherNode"},
+
     };
 
         public static Dictionary<string, string> CssClass = new Dictionary<string, string>()
@@ -387,11 +444,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
         public static class BusinessProcessFlow
         {
             public static string NextStage = "BPF_NextStage";
+            public static string NextStageMenu = "BPF_NextStageMenu";
+            public static string NextStageMenuOptions = "BPF_NextStageMenuOptions";
             public static string PreviousStage = "BPF_PreviousStage";
             public static string Hide = "BPF_Hide";
             public static string SetActive = "BPF_SetActive";
+            public static string Finish = "BPF_Finish";
+            public static string FinishedLabel = "BPF_FinishedLabel";
             public static string SelectStage = "BPF_SelectStage";
             public static string Ok = "BPF_Ok";
+            public static string TextFieldContainer = "BPF_TextFieldContainer";
+            public static string CheckboxFieldContainer = "BPF_CheckboxFieldContainer";
+            public static string OptionSetFieldContainer = "BPF_OptionSetFieldContainer";
+            public static string LookupFieldContainer = "BPF_LookupFieldContainer";
+            public static string DateFieldContainer = "BPF_DateFieldContainer";
+            public static string DateFieldInput = "BPF_DateFieldInput";
+            public static string GetLookupSearchIcon = "BPF_GetLookupSearchIcon";
         }
 
         public static class Dialogs
@@ -406,6 +474,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string AddConnectionHeader = "Dialog_AddConnectionHeader";
             public static string WarningFooter = "Dialog_WarningFooter";
             public static string WarningCloseButton = "Dialog_WarningCloseButton";
+            public static string CloseFoundPlacesDialog = "Dialog_CloseFoundPlaces";
 
             public static class CloseOpportunity
             {
@@ -528,6 +597,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string AppsForCRM = "Nav_AppsForCrm";
             public static string WelcomeScreen = "Nav_WelcomeScreen";
             public static string About = "Nav_About";
+            public static string AboutVersionText = "Nav_AboutVersionText";
             public static string OptOutLP = "Nav_OptOutLP";
             public static string Privacy = "Nav_Privacy";
             public static string UserInfo = "Nav_UserInfo";
@@ -564,7 +634,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string FindCriteriaImg = "Grid_FindCriteriaImg";
             public static string GridBodyTable = "Grid_GridBodyTable";
             public static string GridBodyTableRow = "Grid_GridBodyTable_Row";
-            public static string GridBodyTableRowSpan = "Grid_GridBodyTable_RowSpan";
+            public static string GridBodyTableRowCheckbox = "Grid_GridBodyTable_RowCheckbox";
             public static string FindCriteria = "Grid_FindCriteria";
             public static string ViewSelector = "Grid_ViewSelector";
             public static string Refresh = "Grid_Refresh";
@@ -591,6 +661,46 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string SelectFormSection = "Entity_SelectFormSection"; //GitHub Issue 56
             public static string LookupRender = "Entity_LookupRenderClass";
             public static string Popout = "Entity_PopoutClass";
+            public static string FieldContainer = "Entity_FieldContainer";
+            public static string TextFieldContainer = "Entity_TextFieldContainer";
+            public static string CheckboxFieldContainer = "Entity_CheckboxFieldContainer";
+            public static string TwoOptionFieldList = "Entity_TwoOptionFieldList";
+            public static string TwoOptionFieldListOption = "Entity_TwoOptionFieldListOption";
+            public static string TwoOptionFieldTd = "Entity_TwoOptionFieldTd";
+            public static string TwoOptionFieldCheckbox = "Entity_TwoOptionFieldCheckbox";
+            public static string OptionSetFieldContainer = "Entity_OptionSetFieldContainer";
+            public static string LookupFieldContainer = "Entity_LookupFieldContainer";
+            public static string LookupFieldTd= "Entity_LookupFieldTd";
+            public static string LookupFieldInput= "Entity_LookupFieldInput";
+            public static string DateFieldContainer = "Entity_DateFieldContainer";
+            public static string DateFieldInput = "Entity_DateFieldInput";
+            public static string GetLookupSearchIcon = "Entity_GetLookupSearchIcon";
+            public static string TextFieldContainer_Header = "Entity_Header_TextFieldContainer";
+            public static string CheckboxFieldContainer_Header = "Entity_Header_CheckboxFieldContainer";
+            public static string TwoOptionFieldList_Header = "Entity_Header_TwoOptionFieldList";
+            public static string TwoOptionFieldListOption_Header = "Entity_Header_TwoOptionFieldListOption";
+            public static string TwoOptionFieldDiv_Header = "Entity_Header_TwoOptionFieldDiv";
+            public static string TwoOptionFieldCheckbox_Header = "Entity_Header_TwoOptionFieldCheckbox";
+            public static string OptionSetFieldContainer_Header = "Entity_Header_OptionSetFieldContainer";
+            public static string LookupFieldContainer_Header = "Entity_Header_LookupFieldContainer";
+            public static string DateFieldContainer_Header = "Entity_Header_DateFieldContainer";
+            public static string DateFieldInput_Header = "Entity_Header_DateFieldInput";
+            public static string GetLookupSearchIcon_Header = "Entity_Header_GetLookupSearchIcon";
+            public static string TextFieldContainer_Footer = "Entity_Footer_TextFieldContainer";
+            public static string CheckboxFieldContainer_Footer = "Entity_Footer_CheckboxFieldContainer";
+            public static string TwoOptionFieldTd_Footer = "Entity_Footer_TwoOptionFieldTd";
+            public static string TwoOptionFieldCheckbox_Footer = "Entity_Footer_TwoOptionFieldCheckbox";
+            public static string OptionSetFieldContainer_Footer = "Entity_Footer_OptionSetFieldContainer";
+            public static string LookupFieldContainer_Footer = "Entity_Footer_LookupFieldContainer";
+            public static string DateFieldContainer_Footer = "Entity_Footer_DateFieldContainer";
+            public static string DateFieldInput_Footer = "Entity_Footer_DateFieldInput";
+            public static string GetLookupSearchIcon_Footer = "Entity_Footer_GetLookupSearchIcon";
+            public static string SubGrid = "Entity_SubGrid";
+            public static string SubGridHeaderCell = "Entity_SubGrid_HeaderCell";
+            public static string SubGridRow = "Entity_SubGrid_Row";
+            public static string SubGridCell = "Entity_SubGrid_Cell";
+            public static string SubGridRowDeleteButton = "Entity_SubGrid_RowDeleteButton";
+            public static string SubGridItemsTotal = "Entity_SubGrid_ItemsTotal";
         }
         public static class MenuRelated
         {
@@ -738,6 +848,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string Remove = "LookUp_Remove";
             public static string Add = "LookUp_Add";
             public static string Begin = "LookUp_Begin";
+            public static string Search = "LookUp_Search";
 
         }
         public static class Login
@@ -747,6 +858,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             public static string SignIn = "Login_SignIn";
             public static string CrmMainPage = "Login_CrmMainPage";
             public static string StaySignedIn = "Login_StaySignedIn";
+            public static string TaggingId = "Login_TaggingId";
         }
         public static class Report
         {

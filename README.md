@@ -10,9 +10,10 @@ Microsoft Visual Studio 2015, Microsoft Visual Studio 2017
 
 ### CRM Versions
 Easy Repro supports below CRM Versions	
-- Microsoft Dynamics® CRM Online 2016 8.1 (8.1.1.x) (DB 8.1.1.x)
 - Microsoft Dynamics 365 Online Version 8.2 (8.2.x) (DB 8.2.x) online
 - Microsoft Dynamics 365 Online Version 9.0 (9.0.x) (DB 9.0.x) online
+- Microsoft Dynamics 365 Online Version 9.0.2 (9.0.2) (DB 9.0.2) online
+- Microsoft Dynamics 365 Online Version 9.1 (9.1.x) (DB 9.1.x) online
 
 #### Selenium Webdriver & Support
 Selenium is a set of different software tools each with a different approach to supporting browser automation. These tools are highly flexible, allowing many options for locating and manipulating elements within a browser, and one of its key features is the support for automating multiple browser platforms. This package contains the .NET bindings for the newer, more concise and object-based Selenium WebDriver API, which uses native OS-level events to manipulate the browser, bypassing the JavaScript sandbox, and does not require the Selenium Server to automate the browser.
@@ -53,7 +54,7 @@ Selenium is a set of different software tools each with a different approach to 
 Although we don't have specific commands to cover the above funcationality, we have generic commands that will allow you to still interact with those features. 
 
 ## Known Issues #
-- Edge Browser is currently not supported due to known bug that is planned for future release.
+- Microsoft Edge Browser, based on Chromium, is currently not supported.
 - Firefox has sometimes been inconsistent with testing results.  The click command is inconsistent. This is a known issue and has been reported to that team that manages that driver. 
 - IE Driver has a 32-bit version and a 64-bit version. If you're using the 32-bit version on 64-bit windows with 64-bit IE then the driver will not work as intended.  Use the appropriate version of IE Driver with the specific version of IE. 
 
@@ -66,7 +67,7 @@ The Sample project should have NUGET packages added and you just need to build t
   
 | Browser    | WebDriver           | Version           | Release date      |
 | -----------|-------------------- |-----------------  | --------------    |
-| Chrome     | ChromeDriver        |v.2.38.0.0         |  April 23, 2018    |
+| Chrome     | ChromeDriver        |v.2.38.0.0         |  April 21, 2018    |
 | Firefox    | GeckoDriver         |v.0.16.1           |  April 27, 2017   |
 | IE         | IEDriver            |v.3.4              |  April 22, 2017   |
 | Edge       | MicrosoftWebDriver  |v.10.0.15063.0     |  April 18, 2017   |
