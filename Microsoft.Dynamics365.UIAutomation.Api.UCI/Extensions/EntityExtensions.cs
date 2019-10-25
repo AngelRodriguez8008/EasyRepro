@@ -7,11 +7,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI.Extensions
         public static BrowserCommandResult<string> GetLookupValue(this Entity entity, string attribute) =>
             entity.GetValue(new LookupItem {Name = attribute});
 
-        public static void SetLookupValue(this Entity entity, string attribute, string value)
-        {
-            entity.SetValue(attribute, value);
-            entity.SelectLookup(new LookupItem{ Name = attribute, Index =  0});
-        }
-
+        public static void SetLookupValue(this Entity entity, string attribute, string value) =>
+            entity.SetValue(new LookupItem { Name = attribute, Value = value });
+        
+        public static void ClearLookup(this Entity entity, string attribute) =>
+            entity.RemoveValues(new []{new LookupItem{ Name = attribute }});
     }
 }

@@ -409,12 +409,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
 
         public static bool WaitForPageToLoad(this IWebDriver driver)
         {
-            return WaitForPageToLoad(driver, Constants.DefaultTimeout.Seconds);
+            return WaitForPageToLoad(driver, (int) Constants.DefaultTimeout.TotalSeconds);
         }
 
         public static bool WaitForTransaction(this IWebDriver driver)
         {
-            return WaitForTransaction(driver, Constants.DefaultTimeout.Seconds);
+            var seconds = (int) Constants.DefaultTimeout.TotalSeconds;
+            return WaitForTransaction(driver, seconds);
         }
 
         //public static bool WaitForPageToLoad(this IWebDriver driver, TimeSpan timeout)
@@ -486,7 +487,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             try
             {
                 //Poll every half second to see if UCI is idle
-                WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(500));
+                WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(maxWaitTimeInSeconds));
                 wait.Until(d =>
                 {
                     try

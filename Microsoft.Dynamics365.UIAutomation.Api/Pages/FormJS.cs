@@ -1,42 +1,31 @@
 ﻿using System;
 using Microsoft.Dynamics365.UIAutomation.Browser;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Support.Extensions;
 
 namespace Microsoft.Dynamics365.UIAutomation.Api.Pages
 {
     public class FormJS : BrowserPage
     {
+        private readonly IFormJSWorker _worker;
+
         public FormJS(InteractiveBrowser browser)
             : base(browser)
-        { }
-
-        public BrowserCommandOptions GetOptions(string commandName)
         {
-            return new BrowserCommandOptions(Constants.DefaultTraceSource,
-                commandName,
-                0,
-                0,
-                null,
-                true,
-                typeof(NoSuchElementException), typeof(StaleElementReferenceException));
+            _worker = new FormJSWorker(browser);
         }
 
-        public bool SwitchToContent()
+        public FormJS(IFormJSWorker worker)
         {
-            Browser.Driver.SwitchTo().DefaultContent();
-            //wait for the content panel to render
-            Browser.Driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Frames.ContentPanel]));
-
-            //find the crmContentPanel and find out what the current content frame ID is - then navigate to the current content frame
-            var currentContentFrame = Browser.Driver.FindElement(By.XPath(Elements.Xpath[Reference.Frames.ContentPanel]))
-                .GetAttribute(Elements.ElementId[Reference.Frames.ContentFrameId]);
-
-            Browser.Driver.SwitchTo().Frame(currentContentFrame);
-
-            return true;
+            _worker = worker;
         }
 
+        public BrowserCommandResult<TResult> ExecuteJS<T, TResult>(string commandName, string code, Func<T, TResult> converter) 
+            => _worker.ExecuteJS(commandName, code, converter);
+        public bool ExecuteJS(string commandName, string code, params object[] args) 
+            => _worker.ExecuteJS(commandName, code, args);
+        
+        public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) 
+            => ExecuteJS<T, T>(commandName, code, result => result);
+        
         public BrowserCommandResult<T> GetAttributeValue<T>(string attributte)
         {
             var commandName = $"Get Attribute Value via Form JS: {attributte}";
@@ -104,32 +93,5 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.Pages
                 });
         }
 
-
-        public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) => ExecuteJS<T, T>(commandName, code, result => result);
-
-        public BrowserCommandResult<TResult> ExecuteJS<T, TResult>(string commandName, string code, Func<T, TResult> converter)
-        {
-            if (converter == null)
-                throw new ArgumentNullException(nameof(converter));
-
-            return Execute(GetOptions(commandName), driver =>
-            {
-                SwitchToContent();
-
-                T result = driver.ExecuteJavaScript<T>(code);
-                return converter(result);
-            });
-        }
-        
-        public bool ExecuteJS(string commandName, string code, params object[] args)
-        {
-            return Execute(GetOptions(commandName), driver =>
-            {
-                SwitchToContent();
-
-                driver.ExecuteJavaScript(code, args);
-                return true;
-            });
-        }
     }
 }

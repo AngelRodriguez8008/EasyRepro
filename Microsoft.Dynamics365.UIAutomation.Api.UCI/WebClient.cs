@@ -6,7 +6,6 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
 using System.Security;
 using System.Threading;
@@ -28,10 +27,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             return new BrowserCommandOptions(Constants.DefaultTraceSource,
                 commandName,
-                0,
-                0,
+                Constants.DefaultRetryAttempts,
+                Constants.DefaultRetryDelay,
                 null,
-                true,
+                false,
                 typeof(NoSuchElementException), typeof(StaleElementReferenceException));
         }
 
@@ -1798,7 +1797,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             return this.Execute(GetOptions($"Set Lookup Value: {control.Name}"), driver =>
             {
-                driver.WaitForTransaction(5);
+                driver.WaitForTransaction(120);
 
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", control.Name)));
 
@@ -1814,11 +1813,14 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     input.SendKeys(Keys.Backspace);
                     input.SendKeys(control.Value, true);
 
-                    driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupSearchButton].Replace("[NAME]", control.Name)));
+                    var byXPath = By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupSearchButton].Replace("[NAME]", control.Name));
+                    driver.WaitUntilVisible(byXPath);
+
+                    driver.ClickWhenAvailable(byXPath);
                     driver.WaitForTransaction();
                 }
 
-                if (control.Value != null && control.Value != "")
+                if (!string.IsNullOrEmpty(control.Value))
                 {
                     SetLookUpByValue(driver, control, index);
                 }
@@ -3317,8 +3319,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 searchScope = Browser.Driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabsMenu]));
             }
             
-
-            if (searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out IWebElement listItem))
+            if (searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out IWebElement listItem))
             {
                 listItem.Click(true);
             }
@@ -3326,7 +3327,53 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 throw new Exception($"The tab with name: {name} does not exist");
             }
-            
+        }
+
+        /// <returns>True on success, Exception on failure to invoke any action</returns>
+        internal BrowserCommandResult<bool> IsTabVisible(string tabName, string subTabName = "", int thinkTime = Constants.DefaultThinkTime)
+        {
+            Browser.ThinkTime(thinkTime);
+
+            return Execute("Is Tab Visible", driver =>
+            {
+                IWebElement tabList = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TabList]));
+                if (tabList == null)
+                    return false;
+                
+                bool result;
+                //Click Sub Tab if provided
+                if (string.IsNullOrEmpty(subTabName))
+                {
+                    result = IsTabVisible(tabList, AppElements.Xpath[AppReference.Entity.Tab], tabName);
+                }
+                else
+                {
+                    ClickTab(tabList, AppElements.Xpath[AppReference.Entity.Tab], tabName);
+                    result = IsTabVisible(tabList, AppElements.Xpath[AppReference.Entity.SubTab], subTabName);
+                }
+                return result;
+            });
+        }
+
+        
+        internal bool IsTabVisible(IWebElement tabList, string xpath, string name)
+        {
+            // Look for the tab in the tab list, else in the more tabs menu
+            IWebElement searchScope = null;
+            if(tabList.HasElement(By.XPath(string.Format(xpath, name))))
+            {
+                searchScope = tabList;
+
+            }
+            else if(tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
+            {
+                moreTabsButton.Click();
+                searchScope = Browser.Driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabsMenu]));
+            }
+
+            IWebElement listItem = null;
+            var result = searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out  listItem);
+            return result && listItem != null;
         }
 
         /// <summary>

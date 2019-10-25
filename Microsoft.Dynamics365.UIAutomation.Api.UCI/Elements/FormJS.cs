@@ -6,24 +6,25 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 {
     public class FormJS : Element
     {
-        private readonly FormJSPage _worker;  
+        private readonly FormJSWorker _worker;  
+        private readonly Pages.FormJS _page;  
 
         public FormJS(WebClient client) 
         {
-            _worker = new FormJSPage(client.Browser);
+            _worker = new FormJSWorker(client);
+            _page = new Pages.FormJS(_worker);
         }
+        
+        public BrowserCommandResult<TResult> ExecuteJS<T, TResult>(string commandName, string code, Func<T, TResult> converter) => _page.ExecuteJS(commandName, code, converter);
+        public bool ExecuteJS(string commandName, string code, params object[] args) => _page.ExecuteJS(commandName, code, args);
+        public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) => _page.ExecuteJS<T>(commandName, code);
 
-        public BrowserCommandOptions GetOptions(string commandName) => _worker.GetOptions(commandName);
-        public bool SwitchToContent() => _worker.SwitchToContent();
-        public BrowserCommandResult<T> GetAttributeValue<T>(string attributte) => _worker.GetAttributeValue<T>(attributte);
-        public bool SetAttributeValue<T>(string attributte, T value) => _worker.SetAttributeValue(attributte, value);
-        public bool Clear(string attribute) => _worker.Clear(attribute);
-        public BrowserCommandResult<Guid> GetEntityId() => _worker.GetEntityId();
-        public BrowserCommandResult<bool> IsControlVisible(string attributte) => _worker.IsControlVisible(attributte);
-        public BrowserCommandResult<bool> IsDirty(string attributte) => _worker.IsDirty(attributte);
-        public BrowserCommandResult<FormJSPage.RequiredLevel> GetRequiredLevel(string attributte) => _worker.GetRequiredLevel(attributte);
-        public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) => _worker.ExecuteJS<T>(commandName, code);
-        public BrowserCommandResult<TResult> ExecuteJS<T, TResult>(string commandName, string code, Func<T, TResult> converter) => _worker.ExecuteJS(commandName, code, converter);
-        public bool ExecuteJS(string commandName, string code, params object[] args) => _worker.ExecuteJS(commandName, code, args);
+        public BrowserCommandResult<T> GetAttributeValue<T>(string attributte) => _page.GetAttributeValue<T>(attributte);
+        public bool SetAttributeValue<T>(string attributte, T value) => _page.SetAttributeValue(attributte, value);
+        public bool Clear(string attribute) => _page.Clear(attribute);
+        public BrowserCommandResult<Guid> GetEntityId() => _page.GetEntityId();
+        public BrowserCommandResult<bool> IsControlVisible(string attributte) => _page.IsControlVisible(attributte);
+        public BrowserCommandResult<bool> IsDirty(string attributte) => _page.IsDirty(attributte);
+        public BrowserCommandResult<FormJSPage.RequiredLevel> GetRequiredLevel(string attributte) => _page.GetRequiredLevel(attributte);
     }
 }

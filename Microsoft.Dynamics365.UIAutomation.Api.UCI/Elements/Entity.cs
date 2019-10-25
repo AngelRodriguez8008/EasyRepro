@@ -303,6 +303,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             _client.SelectTab(tabName, subTabName);
         }
 
+        /// <summary>
+        /// Opens any tab on the web page.
+        /// </summary>
+        /// <param name="tabName">The name of the tab based on the References class</param>
+        public BrowserCommandResult<bool> IsTabVisible(string tabName) => _client.IsTabVisible(tabName);
+        
+
         public void SetHeaderValue(string field, string value)
         {
             _client.SetHeaderValue(field, value);

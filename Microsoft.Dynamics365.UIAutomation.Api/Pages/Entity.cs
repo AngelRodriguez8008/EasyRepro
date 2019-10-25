@@ -686,7 +686,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
             return this.Execute(GetOptions($"Collapse Tab: {name}"), driver =>
             {
-                if (!driver.HasElement(By.XPath(Elements.Xpath[Reference.Entity.Tab].Replace("[NAME]", name))))
+                if (!IsTabVisible(driver, name))
                 {
                     throw new InvalidOperationException($"Tab with name '{name}' does not exist.");
                 }
@@ -726,13 +726,26 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
         /// <param name="name">The name of the Tab.</param>
         /// <param name="thinkTime">Used to simulate a wait time between human interactions. The Default is 2 seconds.</param>
         /// <example>xrmBrowser.Entity.ExpandTab("Summary");</example>
+        public BrowserCommandResult<bool> IsTabVisible(string name, int thinkTime = Constants.DefaultThinkTime)
+        {
+            Browser.ThinkTime(thinkTime);
+
+            return Execute(GetOptions($"Is Tab Visible: {name}"), driver => IsTabVisible(driver, name));
+        }
+
+        /// <summary>
+        /// Expands the Tab on a CRM Entity form.
+        /// </summary>
+        /// <param name="name">The name of the Tab.</param>
+        /// <param name="thinkTime">Used to simulate a wait time between human interactions. The Default is 2 seconds.</param>
+        /// <example>xrmBrowser.Entity.ExpandTab("Summary");</example>
         public BrowserCommandResult<bool> ExpandTab(string name, int thinkTime = Constants.DefaultThinkTime)
         {
             Browser.ThinkTime(thinkTime);
 
             return this.Execute(GetOptions($"Expand Tab: {name}"), driver =>
             {
-                if (!driver.HasElement(By.XPath(Elements.Xpath[Reference.Entity.Tab].Replace("[NAME]", name))))
+                if (IsTabVisible(driver, name))
                 {
                     throw new InvalidOperationException($"Tab with name '{name}' does not exist.");
                 }
@@ -743,6 +756,12 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
                 return true;
             });
+        }
+
+
+        private static bool IsTabVisible(IWebDriver driver, string name)
+        {
+            return driver.HasElement(By.XPath(Elements.Xpath[Reference.Entity.Tab].Replace("[NAME]", name)));
         }
 
         /// <summary>
