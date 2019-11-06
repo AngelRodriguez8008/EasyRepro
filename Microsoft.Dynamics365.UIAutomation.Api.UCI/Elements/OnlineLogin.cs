@@ -21,9 +21,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <param name="orgUrl">URL of the organization</param>
         /// <param name="username">User name</param>
         /// <param name="password">Password</param>
-        public void Login(Uri orgUrl, SecureString username, SecureString password)
+        /// <param name="mfaSecrectKey">SecrectKey for multi-factor authentication</param>
+        public void Login(Uri orgUrl, SecureString username, SecureString password, SecureString mfaSecrectKey = null)
         {
-            _client.Login(orgUrl, username, password);
+            _client.Login(orgUrl, username, password, mfaSecrectKey);
 
             if (_client.Browser.Options.UCITestMode)
             {
@@ -37,10 +38,11 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <param name="orgUrl">URL of the organization</param>
         /// <param name="username">User name</param>
         /// <param name="password">Password</param>
+        /// <param name="mfaSecrectKey">SecrectKey for multi-factor authentication</param>
         /// <param name="redirectAction">Actions required during redirect</param>
-        public void Login(Uri orgUrl, SecureString username, SecureString password, Action<LoginRedirectEventArgs> redirectAction)
+        public void Login(Uri orgUrl, SecureString username, SecureString password, SecureString mfaSecrectKey, Action<LoginRedirectEventArgs> redirectAction)
         {
-            _client.Login(orgUrl, username, password, redirectAction);
+            _client.Login(orgUrl, username, password, mfaSecrectKey, redirectAction);
 
             if (_client.Browser.Options.UCITestMode)
             {

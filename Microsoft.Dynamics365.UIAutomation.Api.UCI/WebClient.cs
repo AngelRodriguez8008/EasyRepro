@@ -6,10 +6,12 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Security;
 using System.Threading;
 using System.Web;
+using OtpNet;
 
 namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 {
@@ -63,84 +65,136 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         public string[] OnlineDomains { get; set; }
 
         #region Login
-        internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password)
+        internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null)
         {
-            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, default(Action<LoginRedirectEventArgs>));
+            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, mfaSecrectKey, default(Action<LoginRedirectEventArgs>));
         }
 
-        internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, Action<LoginRedirectEventArgs> redirectAction)
+        internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null, Action<LoginRedirectEventArgs> redirectAction = null)
         {
-            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, redirectAction);
+            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, mfaSecrectKey, redirectAction);
         }
 
-        private LoginResult Login(IWebDriver driver, Uri uri, SecureString username, SecureString password,
-            Action<LoginRedirectEventArgs> redirectAction)
+        private LoginResult Login(IWebDriver driver, Uri uri, SecureString username, SecureString password, SecureString mfaSecrectKey = null,
+            Action<LoginRedirectEventArgs> redirectAction = null)
         {
-            var redirect = false;
             bool online = !(this.OnlineDomains != null && !this.OnlineDomains.Any(d => uri.Host.EndsWith(d)));
             driver.Navigate().GoToUrl(uri);
 
-            if (online)
+            if (!online)
+                return LoginResult.Success;
+
+            if (driver.IsVisible(By.Id("use_another_account_link")))
+                driver.ClickWhenAvailable(By.Id("use_another_account_link"));
+
+            EnterUserName(driver, username);
+
+            Thread.Sleep(1000);
+
+            if (driver.IsVisible(By.Id("aadTile")))
             {
-                if (driver.IsVisible(By.Id("use_another_account_link")))
-                    driver.ClickWhenAvailable(By.Id("use_another_account_link"));
-
-                driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Login.UserId]),
-                    $"The Office 365 sign in page did not return the expected result and the user '{username}' could not be signed in.");
-
-                driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(username.ToUnsecureString());
-                driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(Keys.Tab);
-                driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(Keys.Enter);
-
-                Thread.Sleep(1000);
-
-                if (driver.IsVisible(By.Id("aadTile")))
-                {
-                    driver.FindElement(By.Id("aadTile")).Click(true);
-                }
-
-                Thread.Sleep(1000);
-
-                //If expecting redirect then wait for redirect to trigger
-                if (redirectAction != null)
-                {
-                    //Wait for redirect to occur.
-                    Thread.Sleep(3000);
-
-                    redirectAction?.Invoke(new LoginRedirectEventArgs(username, password, driver));
-
-                    redirect = true;
-                }
-                else
-                {
-                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).SendKeys(password.ToUnsecureString());
-                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).SendKeys(Keys.Tab);
-                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).Submit();
-
-                    Thread.Sleep(1000);
-
-                    driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]), new TimeSpan(0, 0, 5));
-
-                    if (driver.IsVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
-                    {
-                        driver.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]));
-                    }
-
-                    driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
-                        , new TimeSpan(0, 0, 60),
-                        e => {
-                            e.WaitForPageToLoad();
-                            e.SwitchTo().Frame(0);
-                            e.WaitForPageToLoad();
-
-                            //Switch Back to Default Content for Navigation Steps
-                            e.SwitchTo().DefaultContent();
-                        },
-                        f => { throw new Exception("Login page failed."); });
-                }
+                driver.FindElement(By.Id("aadTile")).Click(true);
             }
 
-            return redirect ? LoginResult.Redirect : LoginResult.Success;
+            Thread.Sleep(1000);
+
+            //If expecting redirect then wait for redirect to trigger
+            if (redirectAction != null)
+            {
+                //Wait for redirect to occur.
+                Thread.Sleep(3000);
+
+                redirectAction.Invoke(new LoginRedirectEventArgs(username, password, driver));
+                return LoginResult.Redirect;
+            }
+
+            EnterPassword(driver, password);
+            Thread.Sleep(1000);
+
+            EnterOneTimeCode(driver, mfaSecrectKey);
+
+            if (mfaSecrectKey == null)
+                ClickStaySignedIn(driver);
+
+            Thread.Sleep(1000);
+
+            driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
+                , new TimeSpan(0, 0, 60),
+                SwitchToDefaultContent,
+                f => throw new Exception("Login page failed."));
+
+            return LoginResult.Success;
+        }
+
+        private static string GenerateOneTimeCode(SecureString mfaSecrectKey)
+        {
+            // credits:
+            // https://dev.to/j_sakamoto/selenium-testing---how-to-sign-in-to-two-factor-authentication-2joi
+            // https://www.nuget.org/packages/Otp.NET/
+            string key = mfaSecrectKey?.ToUnsecureString(); // <- this 2FA secret key.
+
+            byte[] base32Bytes = Base32Encoding.ToBytes(key);
+
+            var totp = new Totp(base32Bytes);
+            var result = totp.ComputeTotp(); // <- got 2FA coed at this time!
+            return result;
+        }
+
+        private static void EnterUserName(IWebDriver driver, SecureString username)
+        {
+            driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Login.UserId]),
+                $"The Office 365 sign in page did not return the expected result and the user '{username}' could not be signed in.");
+
+            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(username.ToUnsecureString());
+            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(Keys.Enter);
+        }
+
+        private static void EnterPassword(IWebDriver driver, SecureString password)
+        {
+            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).SendKeys(password.ToUnsecureString());
+            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).Submit();
+        }
+
+        private static void EnterOneTimeCode(IWebDriver driver, SecureString mfaSecrectKey)
+        {
+            int attempts = 0;
+            while (true)
+            {
+                try
+                {
+                    var oneTimeCode = GenerateOneTimeCode(mfaSecrectKey);
+                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.OneTimeCode])).SendKeys(oneTimeCode);
+                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.OneTimeCode])).Submit();
+                    return;
+                }
+                catch (Exception e)
+                {
+                    Debug.WriteLine(e);
+                    if (attempts >= Constants.DefaultRetryAttempts)
+                        throw;
+                    attempts++;
+                }
+            }
+        }
+
+        private static void ClickStaySignedIn(IWebDriver driver)
+        {
+            driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]), new TimeSpan(0, 0, 5));
+
+            if (driver.IsVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
+            {
+                driver.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]));
+            }
+        }
+
+        private static void SwitchToDefaultContent(IWebDriver driver)
+        {
+            driver.WaitForPageToLoad();
+            driver.SwitchTo().Frame(0);
+            driver.WaitForPageToLoad();
+
+            //Switch Back to Default Content for Navigation Steps
+            driver.SwitchTo().DefaultContent();
         }
 
         public void ADFSLoginAction(LoginRedirectEventArgs args)
@@ -171,7 +225,6 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
 
         public void MSFTLoginAction(LoginRedirectEventArgs args)
-
         {
             //Login Page details go here.  You will need to find out the id of the password field on the form as well as the submit button. 
             //You will also need to add a reference to the Selenium Webdriver to use the base driver. 
@@ -198,13 +251,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             //Wait for CRM Page to load
             d.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
                 , new TimeSpan(0, 0, 60),
-            e =>
-            {
-                e.WaitForPageToLoad();
-                e.SwitchTo().Frame(0);
-                e.WaitForPageToLoad();
-            },
-                f => { throw new Exception("Login page failed."); });
+                e =>
+                {
+                    e.WaitForPageToLoad();
+                    e.SwitchTo().Frame(0);
+                    e.WaitForPageToLoad();
+                },
+                f => throw new Exception("Login page failed."));
 
         }
 
@@ -310,7 +363,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 {
                     throw new NotFoundException($"No group with the name '{group}' exists");
                 }
-   
+
                 var subAreaItems = groupList.FindElements(By.XPath(AppElements.Xpath[AppReference.Navigation.SitemapMenuItems]));
                 var subAreaItem = subAreaItems.FirstOrDefault(a => a.GetAttribute("data-text").ToLowerString() == subarea.ToLowerString());
                 if (subAreaItem == null)
@@ -1147,7 +1200,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 return commandValues;
             });
         }
-       
+
         #endregion
 
         #region Grid
@@ -1909,7 +1962,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             var lookupResultsItems = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.LookupFieldResultListItem].Replace("[NAME]", control.Name)));
 
             if (lookupResultsItems == null)
-                throw new NotFoundException($"No Results Matching {control.Value} Were Found.");            
+                throw new NotFoundException($"No Results Matching {control.Value} Were Found.");
 
             var dialogItems = OpenDialog(flyoutDialog).Value;
 
@@ -1975,7 +2028,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 {
                     // This is for statuscode (type = status) that should act like an optionset doesn't doesn't follow the same pattern when rendered
                     driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.EntityOptionsetStatusComboButton].Replace("[NAME]", option.Name)));
-                    
+
                     var listBox = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityOptionsetStatusComboList].Replace("[NAME]", option.Name)));
                     var options = listBox.FindElements(By.TagName("li"));
 
@@ -2501,7 +2554,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 var entityName = driver.ExecuteScript("return Xrm.Page.data.entity.getEntityName();").ToString();
 
-                if (string.IsNullOrEmpty(entityName)) {
+                if (string.IsNullOrEmpty(entityName))
+                {
                     throw new NotFoundException("Unable to retrieve Entity Name for this entity");
                 }
 
@@ -3308,17 +3362,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             // Look for the tab in the tab list, else in the more tabs menu
             IWebElement searchScope = null;
-            if(tabList.HasElement(By.XPath(string.Format(xpath, name))))
+            if (tabList.HasElement(By.XPath(string.Format(xpath, name))))
             {
                 searchScope = tabList;
 
             }
-            else if(tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
+            else if (tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
             {
                 moreTabsButton.Click();
                 searchScope = Browser.Driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabsMenu]));
             }
-            
+
             if (searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out IWebElement listItem))
             {
                 listItem.Click(true);
@@ -3339,7 +3393,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 IWebElement tabList = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TabList]));
                 if (tabList == null)
                     return false;
-                
+
                 bool result;
                 //Click Sub Tab if provided
                 if (string.IsNullOrEmpty(subTabName))
@@ -3355,24 +3409,24 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             });
         }
 
-        
+
         internal bool IsTabVisible(IWebElement tabList, string xpath, string name)
         {
             // Look for the tab in the tab list, else in the more tabs menu
             IWebElement searchScope = null;
-            if(tabList.HasElement(By.XPath(string.Format(xpath, name))))
+            if (tabList.HasElement(By.XPath(string.Format(xpath, name))))
             {
                 searchScope = tabList;
 
             }
-            else if(tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
+            else if (tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
             {
                 moreTabsButton.Click();
                 searchScope = Browser.Driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabsMenu]));
             }
 
             IWebElement listItem = null;
-            var result = searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out  listItem);
+            var result = searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out listItem);
             return result && listItem != null;
         }
 
@@ -3748,11 +3802,11 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     {
                         button = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.CategorizedSearchButton]));
                     }
-                    else if (searchType=="0") //Relevance Search
+                    else if (searchType == "0") //Relevance Search
                     {
                         button = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.RelevanceSearchButton]));
                     }
-                        
+
                     var input = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Text]));
 
                     if (button != null && input != null)
@@ -3785,9 +3839,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
             return this.Execute(GetOptions($"Filter With: {entity}"), driver =>
             {
-                driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Filter]), 
+                driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Filter]),
                                         new TimeSpan(0, 0, 10),
-                                        e => {
+                                        e =>
+                                        {
                                             var picklist = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Filter]));
                                             var options = picklist.FindElements(By.TagName("option"));
 
@@ -3799,9 +3854,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                                                 throw new InvalidOperationException($"Entity '{entity}' does not exist in the Filter options.");
 
                                             option.Click();
-                                            },
-                                        f=> {
-                                             throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available.");
+                                        },
+                                        f =>
+                                        {
+                                            throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available.");
                                         }
                                         );
 
@@ -3823,7 +3879,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.GroupContainer].Replace("[NAME]", filterBy)),
                                         new TimeSpan(0, 0, 10),
-                                        e => {
+                                        e =>
+                                        {
                                             var groupContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.GroupContainer].Replace("[NAME]", filterBy)));
                                             var filter = groupContainer.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.FilterValue].Replace("[NAME]", value)));
 
@@ -3832,7 +3889,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                                             filter.Click();
                                         },
-                                        f => {
+                                        f =>
+                                        {
                                             throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available.");
                                         }
                                         );
@@ -3858,37 +3916,37 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 if (searchType == "1") //Categorized Search
                 {
-                driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]),
-                                        Constants.DefaultTimeout,
-                                        null,
-                                        d => { throw new InvalidOperationException("Search Results is not available"); });
+                    driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]),
+                                            Constants.DefaultTimeout,
+                                            null,
+                                            d => { throw new InvalidOperationException("Search Results is not available"); });
 
 
-                var resultsContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]));
+                    var resultsContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]));
 
-                var entityContainer = resultsContainer.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.EntityContainer].Replace("[NAME]", entity)));
+                    var entityContainer = resultsContainer.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.EntityContainer].Replace("[NAME]", entity)));
 
-                if (entityContainer == null)
-                    throw new InvalidOperationException($"Entity {entity} was not found in the results");
+                    if (entityContainer == null)
+                        throw new InvalidOperationException($"Entity {entity} was not found in the results");
 
-                var records = entityContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Records]));
+                    var records = entityContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Records]));
 
-                if (records == null)
-                    throw new InvalidOperationException($"No records found for entity {entity}");
+                    if (records == null)
+                        throw new InvalidOperationException($"No records found for entity {entity}");
 
-                records[index].Click();
-                driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Entity.Form]),
-                    new TimeSpan(0, 0, 30),
-                    null,
-                    d => { throw new Exception("CRM Record is Unavailable or not finished loading. Timeout Exceeded"); }
-                );
+                    records[index].Click();
+                    driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Entity.Form]),
+                        new TimeSpan(0, 0, 30),
+                        null,
+                        d => { throw new Exception("CRM Record is Unavailable or not finished loading. Timeout Exceeded"); }
+                    );
                 }
                 else if (searchType == "0")   //Relevance Search
                 {
                     var resultsContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.RelevanceResultsContainer]));
-                    var records = resultsContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.RelevanceResults].Replace("[ENTITY]",entity.ToUpper())));
+                    var records = resultsContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.RelevanceResults].Replace("[ENTITY]", entity.ToUpper())));
 
-                    if (records.Count >= index+1)
+                    if (records.Count >= index + 1)
                         records[index].Click(true);
                 }
 
@@ -3910,17 +3968,18 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type]),
                                         Constants.DefaultTimeout,
-                                        c=> {
+                                        c =>
+                                        {
                                             var select = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type]));
                                             var options = select.FindElements(By.TagName("option"));
 
                                             var option = options.FirstOrDefault(x => x.Text.Trim() == type);
 
-                                            if(option!=null)
+                                            if (option != null)
                                             {
                                                 select.Click(true);
                                                 option.Click(true);
-                                            } 
+                                            }
 
                                         },
                                         d => { throw new InvalidOperationException("Search Results is not available"); });
