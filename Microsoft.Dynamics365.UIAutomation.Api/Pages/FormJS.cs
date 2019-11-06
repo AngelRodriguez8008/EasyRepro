@@ -22,7 +22,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.Pages
             => _worker.ExecuteJS(commandName, code, converter);
         public bool ExecuteJS(string commandName, string code, params object[] args) 
             => _worker.ExecuteJS(commandName, code, args);
-        
+        public bool ExecuteJS(string code, params object[] args) 
+            => ExecuteJS("Execute JS via FormJS", code, args);
         public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) 
             => ExecuteJS<T, T>(commandName, code, result => result);
         
@@ -93,5 +94,48 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.Pages
                 });
         }
 
+        public bool Disable(string attributte) => Enable(attributte, false);
+        public bool Enable(string attributte, bool value = true)
+        {
+            var commandName = $"Enable Attribute via Form JS: {attributte}";
+            string code = $"return Xrm.Page.getControl('{attributte}').setDisabled({(value? "false" : "true")});";
+            
+            return ExecuteJS(commandName, code);
+        }
+
+        public bool LoadWebResource(string webResourceName, bool async = true)
+        {
+            string strAsync = async ? "true" : "false";
+            var commandName = $"Load Web Resource: {webResourceName}";
+
+            // credit: Ben John => How to load Javascript from a webresource
+            // https://community.dynamics.com/365/b/leichtbewoelkt/posts/how-to-load-javascript-from-a-webresource
+            string code = $@"(function() {{
+                let req = new XMLHttpRequest();
+                req.open('GET', Xrm.Page.context.getClientUrl() + '/api/data/v8.0/webresourceset?' +
+                                ""$select=content&$filter=name eq '{webResourceName}'"", {strAsync});
+                req.setRequestHeader('OData-Version', '4.0');
+                req.setRequestHeader('OData-MaxVersion', '4.0');
+                req.setRequestHeader('Accept', 'application/json');
+                req.setRequestHeader('Content-Type', 'application/json; charset=utf-8');
+                req.onreadystatechange = function () {{
+                    if (this.readyState === 4) {{
+                        req.onreadystatechange = null;
+                        if (this.status === 200) {{                            
+                            var result = (JSON.parse(this.response)).value[0].content;
+                            var script = atob(result);
+                            window.eval(script);                           
+                            return true;
+                        }}
+                        else
+                            console.error(this.statusText);                        
+                    }}
+                    return false;
+                }};
+                req.send();
+            }})();";
+            
+            return ExecuteJS(commandName, code);
+        }
     }
 }

@@ -16,6 +16,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         
         public BrowserCommandResult<TResult> ExecuteJS<T, TResult>(string commandName, string code, Func<T, TResult> converter) => _page.ExecuteJS(commandName, code, converter);
+        public bool ExecuteJS(string code, params object[] args) => _page.ExecuteJS( code, args);
         public bool ExecuteJS(string commandName, string code, params object[] args) => _page.ExecuteJS(commandName, code, args);
         public BrowserCommandResult<T> ExecuteJS<T>(string commandName, string code) => _page.ExecuteJS<T>(commandName, code);
 
@@ -26,5 +27,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         public BrowserCommandResult<bool> IsControlVisible(string attributte) => _page.IsControlVisible(attributte);
         public BrowserCommandResult<bool> IsDirty(string attributte) => _page.IsDirty(attributte);
         public BrowserCommandResult<FormJSPage.RequiredLevel> GetRequiredLevel(string attributte) => _page.GetRequiredLevel(attributte);
+        public bool Enable(string attributte) => _page.Enable(attributte);
+        public bool Disable(string attributte) => _page.Disable(attributte);
+        public bool LoadWebResource(string webResourceName, bool async = true) => _page.LoadWebResource(webResourceName, async);
     }
 }
