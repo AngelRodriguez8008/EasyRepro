@@ -4,7 +4,6 @@
 using Microsoft.Dynamics365.UIAutomation.Browser;
 using System;
 using System.Collections.Generic;
-using Microsoft.Dynamics365.UIAutomation.Api.Pages;
 
 namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 {
@@ -33,6 +32,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         public GlobalSearch GlobalSearch => this.GetElement<GlobalSearch>(_client);
 		public QuickCreate QuickCreate => this.GetElement<QuickCreate>(_client);
         public Lookup Lookup => this.GetElement<Lookup>(_client);
+        public Telemetry Telemetry => this.GetElement<Telemetry>(_client);
 
         public T GetElement<T>(WebClient client)
             where T : Element

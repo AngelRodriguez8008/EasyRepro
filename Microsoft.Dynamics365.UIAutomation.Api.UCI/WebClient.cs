@@ -17,11 +17,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
     public class WebClient : BrowserPage
     {
         public List<ICommandResult> CommandResults => Browser.CommandResults;
+        public Guid ClientSessionId;
 
         public WebClient(BrowserOptions options)
         {
             Browser = new InteractiveBrowser(options);
             OnlineDomains = Constants.Xrm.XrmDomains;
+            ClientSessionId = Guid.NewGuid();
         }
 
         internal BrowserCommandOptions GetOptions(string commandName)
@@ -35,14 +37,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 typeof(NoSuchElementException), typeof(StaleElementReferenceException));
         }
 
-        internal BrowserCommandResult<bool> InitializeTestMode(bool onlineLoginPath = false)
+        internal BrowserCommandResult<bool> InitializeModes(bool onlineLoginPath = false)
         {
-            return Execute(GetOptions("Initialize Unified Interface TestMode"), driver =>
+            return this.Execute(GetOptions("Initialize Unified Interface Modes"), driver =>
             {
                 var uri = driver.Url;
-                var queryParams = "&flags=testmode=true,easyreproautomation=true";
+                var queryParams = "";
 
-                if (!uri.Contains(queryParams))
+                if(Browser.Options.UCITestMode) queryParams += "&flags=testmode=true,easyreproautomation=true";
+                if (Browser.Options.UCIPerformanceMode) queryParams += "&perf=true";
+
+                if (!string.IsNullOrEmpty(queryParams) && !uri.Contains(queryParams))
                 {
                     var testModeUri = uri + queryParams;
 
@@ -64,9 +69,14 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         public string[] OnlineDomains { get; set; }
 
         #region Login
-        internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null)
+        internal BrowserCommandResult<LoginResult> Login(Uri uri)
         {
-            return Execute(GetOptions("Login"), Login, orgUri, username, password, mfaSecrectKey, default(Action<LoginRedirectEventArgs>));
+            var username = Browser.Options.Credentials.Username;
+            if (username == null)
+                return PassThroughLogin(uri);
+        
+            var password = Browser.Options.Credentials.Password;
+            return Login(uri, username, password);
         }
 
         internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null, Action<LoginRedirectEventArgs> redirectAction = null)
@@ -74,8 +84,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             return Execute(GetOptions("Login"), Login, orgUri, username, password, mfaSecrectKey, redirectAction);
         }
 
-        private LoginResult Login(IWebDriver driver, Uri uri, SecureString username, SecureString password, SecureString mfaSecrectKey = null,
-            Action<LoginRedirectEventArgs> redirectAction = null)
+        private LoginResult Login(IWebDriver driver, Uri uri, SecureString username, SecureString password, SecureString mfaSecrectKey = null, Action<LoginRedirectEventArgs> redirectAction = null)
         {
             bool online = !(OnlineDomains != null && !OnlineDomains.Any(d => uri.Host.EndsWith(d)));
             driver.Navigate().GoToUrl(uri);
@@ -229,6 +238,21 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             driver.SwitchTo().DefaultContent();
         }
 
+        internal BrowserCommandResult<LoginResult> PassThroughLogin(Uri uri)
+        {
+            return Execute(GetOptions("Pass Through Login"), driver =>
+            {
+                driver.Navigate().GoToUrl(uri);
+
+                driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
+                         , new TimeSpan(0, 0, 60),
+                         SwitchToDefaultContent,
+                         f => throw new Exception("Login page failed."));
+
+                return LoginResult.Success;
+            });
+        }
+
         public void ADFSLoginAction(LoginRedirectEventArgs args)
 
         {
@@ -325,12 +349,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     driver.WaitForPageToLoad();
 
                     driver.WaitForTransaction();
-
-                    if (Browser.Options.UCITestMode)
-                    {
-                        InitializeTestMode();
-                    }
-
+                 
                     return true;
                 }
 
@@ -346,7 +365,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     if (!success)
                         throw new InvalidOperationException($"App Name {appName} not found.");
                 //}
-
+                   
+                InitializeModes();
                 return true;
             });
         }
@@ -365,10 +385,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             appTile.Click(true);
 
             driver.WaitForTransaction();
-            if (Browser.Options.UCITestMode)
-            {
-                InitializeTestMode();
-            }
+            InitializeModes();
             return true;
         }
 
@@ -1578,8 +1595,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 if (sortCol == null)
                     throw new InvalidOperationException($"Column: {columnName} Does not exist");
-                else
-                    sortCol.Click();
+                
+                sortCol.Click(true);
+                driver.WaitForTransaction();
                 return true;
             });
         }
@@ -1864,6 +1882,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", control.Name)));
 
+
                 ClearValue(control);
 
                 var input = fieldContainer.FindElements(By.TagName("input")).Count > 0
@@ -1876,10 +1895,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     input.SendKeys(Keys.Backspace);
                     input.SendKeys(control.Value, true);
 
-                    var byXPath = By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupSearchButton].Replace("[NAME]", control.Name));
-                    driver.WaitUntilVisible(byXPath);
-
-                    driver.ClickWhenAvailable(byXPath);
+                    //No longer needed, the search dialog opens when you enter the value
+                    //var byXPath = By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupSearchButton].Replace("[NAME]", control.Name));
+                    //driver.ClickWhenAvailable(byXPath);
                     driver.WaitForTransaction();
                 }
 
@@ -1925,7 +1943,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 {
                     if (input != null)
                     {
-                        if (control.Value != null && control.Value != "")
+                        if (!string.IsNullOrEmpty(control.Value))
                         {
                             input.SendKeys(control.Value, true);
                             input.SendKeys(Keys.Tab);
@@ -1938,7 +1956,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                         driver.WaitForTransaction();
                     }
 
-                    if (control.Value != null && control.Value != "")
+                    if (!string.IsNullOrEmpty(control.Value))
                     {
                         SetLookUpByValue(driver, control, index);
                     }
@@ -1952,7 +1970,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     }
                 }
 
-                input.SendKeys(Keys.Escape); // IE wants to keep the flyout open on multi-value fields, this makes sure it closes
+                input?.SendKeys(Keys.Escape); // IE wants to keep the flyout open on multi-value fields, this makes sure it closes
 
                 return true;
             });
@@ -2884,6 +2902,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", control.Name)));
 
+                fieldContainer.Hover(driver);
+
                 var existingValues = fieldContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.Entity.LookupFieldDeleteExistingValue].Replace("[NAME]", control.Name)));
 
                 var expandCollapseButtons = fieldContainer.FindElements(By.XPath(AppElements.Xpath[AppReference.Entity.LookupFieldExpandCollapseButton].Replace("[NAME]", control.Name)));
@@ -2919,7 +2939,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 else
                 {
                     // Removes an individual item by value or index
-                    if (control.Value != null && control.Value != "")
+                    if (!string.IsNullOrEmpty(control.Value))
                     {
                         foreach (var existingValue in existingValues)
                         {
@@ -3372,25 +3392,19 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             // Look for the tab in the tab list, else in the more tabs menu
             IWebElement searchScope = null;
-            if (tabList.HasElement(By.XPath(string.Format(xpath, name))))
-            {
+            var xpathByName = By.XPath(string.Format(xpath, name));
+            if (tabList.HasElement(xpathByName))
                 searchScope = tabList;
-
-            }
-            else if (tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
+            else if(tabList.TryFindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabs]), out IWebElement moreTabsButton))
             {
                 moreTabsButton.Click();
                 searchScope = Browser.Driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.MoreTabsMenu]));
             }
 
-            if (searchScope != null && searchScope.TryFindElement(By.XPath(string.Format(xpath, name)), out IWebElement listItem))
-            {
+            if (searchScope != null && searchScope.TryFindElement(xpathByName, out IWebElement listItem))
                 listItem.Click(true);
-            }
             else
-            {
                 throw new Exception($"The tab with name: {name} does not exist");
-            }
         }
 
         /// <returns>True on success, Exception on failure to invoke any action</returns>
@@ -4012,6 +4026,15 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 return true;
             });
+        }
+        #endregion
+
+        #region PerformanceCenter
+        internal void EnablePerformanceCenter()
+        {
+            Browser.Driver.Navigate().GoToUrl($"{Browser.Driver.Url}&perf=true");
+            Browser.Driver.WaitForPageToLoad();
+            Browser.Driver.WaitForTransaction();
         }
         #endregion
 

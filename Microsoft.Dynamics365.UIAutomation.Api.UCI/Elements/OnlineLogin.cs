@@ -16,6 +16,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
 
         /// <summary>
+        /// Logs into the organization without providing a username and password.  This login action will use pass through authentication and automatically log you in. 
+        /// </summary>
+        /// <param name="orgUrl">URL of the organization</param>
+        public void Login(Uri orgUrl)
+        {
+            _client.Login(orgUrl);
+
+            _client.InitializeModes(true);
+        }
+
+        /// <summary>
         /// Logs into the organization with the user and password provided
         /// </summary>
         /// <param name="orgUrl">URL of the organization</param>
@@ -26,10 +37,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             _client.Login(orgUrl, username, password, mfaSecrectKey);
 
-            if (_client.Browser.Options.UCITestMode)
-            {
-                _client.InitializeTestMode(true);
-            }
+            _client.InitializeModes(true);
         }
 
         /// <summary>
@@ -44,10 +52,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             _client.Login(orgUrl, username, password, mfaSecrectKey, redirectAction);
 
-            if (_client.Browser.Options.UCITestMode)
-            {
-                _client.InitializeTestMode(true);
-            }
+            _client.InitializeModes(true);           
         }
 
     }

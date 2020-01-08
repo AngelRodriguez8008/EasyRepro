@@ -30,6 +30,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
             this.Height = null;
             this.Width = null;
             this.UCITestMode = true;
+            this.UCIPerformanceMode = false;
+            this.AppInsightsKey = string.Empty;
             this.TimeFactor = 1.0f;
         }
 
@@ -71,6 +73,16 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser
         /// </summary>
         public bool UCITestMode { get; set; }
         public string[] ExtraChromeArguments { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Performance Mode to enable performance center telemetry. 
+        /// </summary>
+        public bool UCIPerformanceMode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Application Insights Instrumentation Key to write telemetry to. 
+        /// </summary>
+        public string AppInsightsKey { get; set; }
 
         public virtual ChromeOptions ToChrome()
         {
