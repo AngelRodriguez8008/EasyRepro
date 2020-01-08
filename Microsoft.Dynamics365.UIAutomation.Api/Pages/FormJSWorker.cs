@@ -18,8 +18,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.Pages
         {
             return new BrowserCommandOptions(Constants.DefaultTraceSource,
                 commandName,
-                0,
-                0,
+                Constants.DefaultRetryAttempts,
+                Constants.DefaultRetryDelay,
                 null,
                 true,
                 typeof(NoSuchElementException), typeof(StaleElementReferenceException));

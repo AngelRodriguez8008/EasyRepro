@@ -6,7 +6,6 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Security;
 using System.Threading;
@@ -32,13 +31,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 Constants.DefaultRetryAttempts,
                 Constants.DefaultRetryDelay,
                 null,
-                false,
+                true,
                 typeof(NoSuchElementException), typeof(StaleElementReferenceException));
         }
 
         internal BrowserCommandResult<bool> InitializeTestMode(bool onlineLoginPath = false)
         {
-            return this.Execute(GetOptions("Initialize Unified Interface TestMode"), driver =>
+            return Execute(GetOptions("Initialize Unified Interface TestMode"), driver =>
             {
                 var uri = driver.Url;
                 var queryParams = "&flags=testmode=true,easyreproautomation=true";
@@ -67,18 +66,18 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         #region Login
         internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null)
         {
-            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, mfaSecrectKey, default(Action<LoginRedirectEventArgs>));
+            return Execute(GetOptions("Login"), Login, orgUri, username, password, mfaSecrectKey, default(Action<LoginRedirectEventArgs>));
         }
 
         internal BrowserCommandResult<LoginResult> Login(Uri orgUri, SecureString username, SecureString password, SecureString mfaSecrectKey = null, Action<LoginRedirectEventArgs> redirectAction = null)
         {
-            return this.Execute(GetOptions("Login"), this.Login, orgUri, username, password, mfaSecrectKey, redirectAction);
+            return Execute(GetOptions("Login"), Login, orgUri, username, password, mfaSecrectKey, redirectAction);
         }
 
         private LoginResult Login(IWebDriver driver, Uri uri, SecureString username, SecureString password, SecureString mfaSecrectKey = null,
             Action<LoginRedirectEventArgs> redirectAction = null)
         {
-            bool online = !(this.OnlineDomains != null && !this.OnlineDomains.Any(d => uri.Host.EndsWith(d)));
+            bool online = !(OnlineDomains != null && !OnlineDomains.Any(d => uri.Host.EndsWith(d)));
             driver.Navigate().GoToUrl(uri);
 
             if (!online)
@@ -87,29 +86,47 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             if (driver.IsVisible(By.Id("use_another_account_link")))
                 driver.ClickWhenAvailable(By.Id("use_another_account_link"));
 
-            EnterUserName(driver, username);
-
-            Thread.Sleep(1000);
-
-            if (driver.IsVisible(By.Id("aadTile")))
+            bool waitingForOtc = false;
+            bool success = EnterUserName(driver, username);
+            if (!success)
             {
-                driver.FindElement(By.Id("aadTile")).Click(true);
+                var isUserAlreadyLogged = IsUserAlreadyLogged(driver);
+                if (isUserAlreadyLogged)
+                {
+                    SwitchToDefaultContent(driver);
+                    return LoginResult.Success;
+                }
+
+                waitingForOtc = GetOtcInput(driver) != null;
+
+                if (!waitingForOtc)
+                    throw new Exception($"Login page failed. {Reference.Login.UserId} not found.");
             }
 
-            Thread.Sleep(1000);
-
-            //If expecting redirect then wait for redirect to trigger
-            if (redirectAction != null)
+            if (!waitingForOtc)
             {
-                //Wait for redirect to occur.
-                Thread.Sleep(3000);
+                Thread.Sleep(1000);
 
-                redirectAction.Invoke(new LoginRedirectEventArgs(username, password, driver));
-                return LoginResult.Redirect;
+                if (driver.IsVisible(By.Id("aadTile")))
+                {
+                    driver.FindElement(By.Id("aadTile")).Click(true);
+                }
+
+                Thread.Sleep(1000);
+
+                //If expecting redirect then wait for redirect to trigger
+                if (redirectAction != null)
+                {
+                    //Wait for redirect to occur.
+                    Thread.Sleep(3000);
+
+                    redirectAction.Invoke(new LoginRedirectEventArgs(username, password, driver));
+                    return LoginResult.Redirect;
+                }
+
+                EnterPassword(driver, password);
+                Thread.Sleep(1000);
             }
-
-            EnterPassword(driver, password);
-            Thread.Sleep(1000);
 
             EnterOneTimeCode(driver, mfaSecrectKey);
 
@@ -118,12 +135,20 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
             Thread.Sleep(1000);
 
-            driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
+            var xpathToMainPage = By.XPath(Elements.Xpath[Reference.Login.CrmMainPage]);
+            driver.WaitUntilVisible(xpathToMainPage
                 , new TimeSpan(0, 0, 60),
                 SwitchToDefaultContent,
-                f => throw new Exception("Login page failed."));
+                f => throw new Exception($"Login page failed. {Reference.Login.CrmMainPage} not found."));
 
             return LoginResult.Success;
+        }
+
+        private static bool IsUserAlreadyLogged(IWebDriver driver)
+        {
+            var xpathToMainPage = By.XPath(Elements.Xpath[Reference.Login.CrmMainPage]);
+            bool result = driver.HasElement(xpathToMainPage);
+            return result;
         }
 
         private static string GenerateOneTimeCode(SecureString mfaSecrectKey)
@@ -140,19 +165,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             return result;
         }
 
-        private static void EnterUserName(IWebDriver driver, SecureString username)
+        private static bool EnterUserName(IWebDriver driver, SecureString username)
         {
-            driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Login.UserId]),
-                $"The Office 365 sign in page did not return the expected result and the user '{username}' could not be signed in.");
+            var input = driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Login.UserId]), new TimeSpan(0, 0, 30));
+            if (input == null)
+                return false;
 
-            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(username.ToUnsecureString());
-            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.UserId])).SendKeys(Keys.Enter);
+            input.SendKeys(username.ToUnsecureString());
+            input.SendKeys(Keys.Enter);
+            return true;
         }
 
         private static void EnterPassword(IWebDriver driver, SecureString password)
         {
-            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).SendKeys(password.ToUnsecureString());
-            driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword])).Submit();
+            var input = driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.LoginPassword]));
+            input.SendKeys(password.ToUnsecureString());
+            input.Submit();
         }
 
         private static void EnterOneTimeCode(IWebDriver driver, SecureString mfaSecrectKey)
@@ -162,20 +190,24 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 try
                 {
+                    IWebElement input = GetOtcInput(driver);
                     var oneTimeCode = GenerateOneTimeCode(mfaSecrectKey);
-                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.OneTimeCode])).SendKeys(oneTimeCode);
-                    driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.OneTimeCode])).Submit();
+                    input.SendKeys(oneTimeCode);
+                    input.Submit();
                     return;
                 }
-                catch (Exception e)
+                catch
                 {
-                    Debug.WriteLine(e);
                     if (attempts >= Constants.DefaultRetryAttempts)
                         throw;
+                    Thread.Sleep(Constants.DefaultRetryDelay);
                     attempts++;
                 }
             }
         }
+
+        private static IWebElement GetOtcInput(IWebDriver driver)
+            => driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.OneTimeCode]));
 
         private static void ClickStaySignedIn(IWebDriver driver)
         {
@@ -266,19 +298,18 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         #region Navigation
         internal BrowserCommandResult<bool> OpenApp(string appName, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open App"), driver =>
+            return Execute(GetOptions("Open App"), driver =>
             {
-
                 driver.SwitchTo().DefaultContent();
-
-                //Handle left hand Nav
-                if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Navigation.AppMenuButton])))
+                // Handle left hand Nav
+                var xpathToAppMenu = By.XPath(AppElements.Xpath[AppReference.Navigation.AppMenuButton]);
+                if (driver.HasElement(xpathToAppMenu))
                 {
-                    driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Navigation.AppMenuButton]));
+                    driver.ClickWhenAvailable(xpathToAppMenu);
 
-                    var container = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.AppMenuContainer]));
+                    var container = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Navigation.AppMenuContainer]));
 
                     var buttons = container.FindElements(By.TagName("button"));
 
@@ -303,50 +334,49 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     return true;
                 }
 
-                //Handle main.aspx?ForcUCI=1
-                if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer])))
-                {
-                    var tileContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer]));
-                    tileContainer.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppTile].Replace("[NAME]", appName))).Click(true);
-
-                    driver.WaitForTransaction();
-
-                    if (Browser.Options.UCITestMode)
-                    {
-                        InitializeTestMode();
-                    }
-
-                }
-                else
-                {
+                //Handle main.aspx?forceUCI=1
+                // TODO: REMOVE COMMENTS FOR OLDER CRM Versions current v9.1
+                //bool success = TryToClickInAppTile(driver, appName);
+                //if (!success)
+                //{
                     //Switch to frame 0
                     driver.SwitchTo().Frame(0);
 
-                    if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer])))
-                    {
-                        var tileContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer]));
-                        tileContainer.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppTile].Replace("[NAME]", appName))).Click(true);
-
-                        driver.WaitForTransaction();
-
-                        if (Browser.Options.UCITestMode)
-                        {
-                            InitializeTestMode();
-                        }
-                    }
-                    else
+                    bool success = TryToClickInAppTile(driver, appName);
+                    if (!success)
                         throw new InvalidOperationException($"App Name {appName} not found.");
-                }
+                //}
 
                 return true;
             });
         }
 
+        private bool TryToClickInAppTile(IWebDriver driver, string appName)
+        {
+            var xpathToAppContainer = By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer]);
+            var xpathToAppTile = By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppTile].Replace("[NAME]", appName));
+
+            var tileContainer = driver.WaitUntilAvailable(xpathToAppContainer, new TimeSpan(0, 0, 30));
+
+            var appTile = tileContainer?.FindElement(xpathToAppTile);
+            if (appTile == null)
+                return false;
+
+            appTile.Click(true);
+
+            driver.WaitForTransaction();
+            if (Browser.Options.UCITestMode)
+            {
+                InitializeTestMode();
+            }
+            return true;
+        }
+
         internal BrowserCommandResult<bool> OpenGroupSubArea(string group, string subarea, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open Group Sub Area"), driver =>
+            return Execute(GetOptions("Open Group Sub Area"), driver =>
             {
                 //Make sure the sitemap-launcher is expanded - 9.1
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Navigation.SiteMapLauncherButton])))
@@ -386,7 +416,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             //this.Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open Sub Area"), driver =>
+            return Execute(GetOptions("Open Sub Area"), driver =>
             {
                 area = area.ToLowerString();
                 subarea = subarea.ToLowerString();
@@ -431,37 +461,20 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         public BrowserCommandResult<Dictionary<string, IWebElement>> OpenAreas(string area, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions("Open Unified Interface Area"), driver =>
+            return Execute(GetOptions("Open Unified Interface Area"), driver =>
             {
-
-                //9.0.2
-                var areas = OpenMenu().Value;
-
-                if (areas != null)
-                {
-                    if (!areas.ContainsKey(area))
-                    {
-                        throw new InvalidOperationException($"No area with the name '{area}' exists.");
-                    }
-
-                    return areas;
-                }
-
-                //9.1
-                areas = OpenMenuFallback(area).Value;
+                //  9.1 ?? 9.0.2 <- inverted order (fallback first) run quickly
+                var areas = OpenMenuFallback(area).Value ?? OpenMenu().Value;
 
                 if (!areas.ContainsKey(area))
-                {
-                    // In this scenario - 
                     throw new InvalidOperationException($"No area with the name '{area}' exists.");
-                }
 
                 return areas;
             });
         }
         public BrowserCommandResult<Dictionary<string, IWebElement>> OpenMenu(int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions("Open Menu"), driver =>
+            return Execute(GetOptions("Open Menu"), driver =>
             {
                 var dictionary = new Dictionary<string, IWebElement>();
 
@@ -478,10 +491,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                                                     dictionary.Add(item.Text.ToLowerString(), item);
                                                 }
                                             },
-                                            e =>
-                                            {
-                                                throw new InvalidOperationException("The Main Menu is not available.");
-                                            });
+                                            e => throw new InvalidOperationException("The Main Menu is not available."));
 
 
                 return dictionary;
@@ -489,7 +499,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         public BrowserCommandResult<Dictionary<string, IWebElement>> OpenMenuFallback(string area, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions("Open Menu"), driver =>
+            return Execute(GetOptions("Open Menu"), driver =>
             {
                 var dictionary = new Dictionary<string, IWebElement>();
 
@@ -567,7 +577,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<Dictionary<string, IWebElement>> OpenSubMenu(string subarea, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Open Sub Menu: {subarea}"), driver =>
+            return Execute(GetOptions($"Open Sub Menu: {subarea}"), driver =>
             {
                 var dictionary = new Dictionary<string, IWebElement>();
 
@@ -627,7 +637,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> OpenSettingsOption(string command, string dataId, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Open " + command + " " + dataId), driver =>
+            return Execute(GetOptions($"Open " + command + " " + dataId), driver =>
             {
                 var cmdButtonBar = AppElements.Xpath[AppReference.Navigation.SettingsLauncherBar].Replace("[NAME]", command);
                 var cmdLauncher = AppElements.Xpath[AppReference.Navigation.SettingsLauncher].Replace("[NAME]", command);
@@ -668,7 +678,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Open Guided Help"), driver =>
+            return Execute(GetOptions($"Open Guided Help"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Navigation.GuidedHelp]));
 
@@ -683,8 +693,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmBrowser.Navigation.OpenAdminPortal();</example>
         internal BrowserCommandResult<bool> OpenAdminPortal(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
-            return this.Execute(GetOptions("Open Admin Portal"), driver =>
+            Browser.ThinkTime(thinkTime);
+            return Execute(GetOptions("Open Admin Portal"), driver =>
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.Application.Shell]));
                 driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.AdminPortal]))?.Click();
@@ -702,7 +712,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Open Global Search"), driver =>
+            return Execute(GetOptions($"Open Global Search"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Navigation.SearchButton]),
                 new TimeSpan(0, 0, 5),
@@ -715,7 +725,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Quick Launch: {toolTip}"), driver =>
+            return Execute(GetOptions($"Quick Launch: {toolTip}"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Navigation.QuickLaunchMenu]));
 
@@ -732,7 +742,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Quick Create: {entityName}"), driver =>
+            return Execute(GetOptions($"Quick Create: {entityName}"), driver =>
             {
                 //Click the + button in the ribbon
                 var quickCreateButton = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Navigation.QuickCreateButton]));
@@ -785,9 +795,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> CloseWarningDialog()
         {
-            return this.Execute(GetOptions($"Close Warning Dialog"), driver =>
+            return Execute(GetOptions($"Close Warning Dialog"), driver =>
             {
-                var inlineDialog = this.SwitchToDialog();
+                var inlineDialog = SwitchToDialog();
                 if (inlineDialog)
                 {
                     var dialogFooter = driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Dialogs.WarningFooter]));
@@ -804,9 +814,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         internal BrowserCommandResult<bool> ConfirmationDialog(bool ClickConfirmButton)
         {
             //Passing true clicks the confirm button.  Passing false clicks the Cancel button.
-            return this.Execute(GetOptions($"Confirm or Cancel Confirmation Dialog"), driver =>
+            return Execute(GetOptions($"Confirm or Cancel Confirmation Dialog"), driver =>
             {
-                var inlineDialog = this.SwitchToDialog();
+                var inlineDialog = SwitchToDialog();
                 if (inlineDialog)
                 {
                     //Wait until the buttons are available to click
@@ -830,9 +840,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> AssignDialog(Dialogs.AssignTo to, string userOrTeamName)
         {
-            return this.Execute(GetOptions($"Assign to User or Team Dialog"), driver =>
+            return Execute(GetOptions($"Assign to User or Team Dialog"), driver =>
             {
-                var inlineDialog = this.SwitchToDialog();
+                var inlineDialog = SwitchToDialog();
                 if (inlineDialog)
                 {
                     if (to != Dialogs.AssignTo.Me)
@@ -884,7 +894,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> SwitchProcessDialog(string processToSwitchTo)
         {
-            return this.Execute(GetOptions($"Switch Process Dialog"), driver =>
+            return Execute(GetOptions($"Switch Process Dialog"), driver =>
             {
                 //Wait for the Grid to load
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.Dialogs.ActiveProcessGridControlContainer]));
@@ -910,9 +920,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> CloseOpportunityDialog(bool clickOK)
         {
-            return this.Execute(GetOptions($"Close Opportunity Dialog"), driver =>
+            return Execute(GetOptions($"Close Opportunity Dialog"), driver =>
             {
-                var inlineDialog = this.SwitchToDialog();
+                var inlineDialog = SwitchToDialog();
 
                 if (inlineDialog)
                 {
@@ -939,7 +949,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             //Introduce think time to avoid timing issues on save dialog
             Browser.ThinkTime(1000);
 
-            return this.Execute(GetOptions($"Validate Save"), driver =>
+            return Execute(GetOptions($"Validate Save"), driver =>
             {
                 //Is it Duplicate Detection?
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.DuplicateDetectionWindowMarker])))
@@ -1035,9 +1045,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         #region CommandBar
         internal BrowserCommandResult<bool> ClickCommand(string name, string subname = "", bool moreCommands = false, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Click Command"), driver =>
+            return Execute(GetOptions($"Click Command"), driver =>
             {
                 IWebElement ribbon = null;
 
@@ -1115,7 +1125,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Get CommandBar Command Count"), driver =>
+            return Execute(GetOptions("Get CommandBar Command Count"), driver =>
             {
                 IWebElement ribbon = null;
                 List<string> commandValues = new List<string>();
@@ -1208,7 +1218,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open View Picker"), driver =>
+            return Execute(GetOptions("Open View Picker"), driver =>
             {
                 var dictionary = new Dictionary<string, string>();
 
@@ -1233,9 +1243,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> SwitchView(string viewName, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Switch View"), driver =>
+            return Execute(GetOptions($"Switch View"), driver =>
             {
                 var views = OpenViewPicker().Value;
                 Thread.Sleep(500);
@@ -1252,9 +1262,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> OpenRecord(int index, int thinkTime = Constants.DefaultThinkTime, bool checkRecord = false)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Open Grid Record"), driver =>
+            return Execute(GetOptions($"Open Grid Record"), driver =>
             {
                 var currentindex = 0;
                 //var control = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.Container]));
@@ -1286,9 +1296,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> Search(string searchCriteria, bool clearByDefault = true, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Search"), driver =>
+            return Execute(GetOptions($"Search"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Grid.QuickFind]));
 
@@ -1308,9 +1318,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> ClearSearch(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Clear Search"), driver =>
+            return Execute(GetOptions($"Clear Search"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Grid.QuickFind]));
 
@@ -1324,7 +1334,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Get Grid Items"), driver =>
+            return Execute(GetOptions("Get Grid Items"), driver =>
             {
                 var returnList = new List<GridItem>();
 
@@ -1380,9 +1390,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> NextPage(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Next Page"), driver =>
+            return Execute(GetOptions($"Next Page"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.NextPage]));
 
@@ -1393,9 +1403,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> PreviousPage(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Previous Page"), driver =>
+            return Execute(GetOptions($"Previous Page"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.PreviousPage]));
 
@@ -1406,9 +1416,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> FirstPage(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"First Page"), driver =>
+            return Execute(GetOptions($"First Page"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.FirstPage]));
 
@@ -1419,9 +1429,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> SelectAll(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Select All"), driver =>
+            return Execute(GetOptions($"Select All"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.SelectAll]));
 
@@ -1434,7 +1444,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Show Chart"), driver =>
+            return Execute(GetOptions("Show Chart"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Grid.ShowChart])))
                 {
@@ -1454,7 +1464,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Hide Chart"), driver =>
+            return Execute(GetOptions("Hide Chart"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Grid.HideChart])))
                 {
@@ -1477,7 +1487,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             if (!Char.IsLetter(filter) && filter != '#')
                 throw new InvalidOperationException("Filter criteria is not valid.");
 
-            return this.Execute(GetOptions("Filter by Letter"), driver =>
+            return Execute(GetOptions("Filter by Letter"), driver =>
             {
                 var jumpBar = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.JumpBar]));
                 var link = jumpBar.FindElement(By.Id(filter + "_link"));
@@ -1500,7 +1510,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Filter by All Records"), driver =>
+            return Execute(GetOptions("Filter by All Records"), driver =>
             {
                 var jumpBar = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.JumpBar]));
                 var link = jumpBar.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.FilterByAll]));
@@ -1523,7 +1533,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Select Grid Record"), driver =>
+            return Execute(GetOptions("Select Grid Record"), driver =>
             {
                 var container = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.RowsContainer]),
                                                         $"Grid Container does not exist.");
@@ -1547,7 +1557,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
             Browser.ThinkTime(1000);
 
-            return this.Execute(GetOptions("Switch Chart"), driver =>
+            return Execute(GetOptions("Switch Chart"), driver =>
             {
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.ChartSelector]));
 
@@ -1562,7 +1572,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Sort by {columnName}"), driver =>
+            return Execute(GetOptions($"Sort by {columnName}"), driver =>
             {
                 var sortCol = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.GridSortColumn].Replace("[COLNAME]", columnName)));
 
@@ -1585,7 +1595,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open Grid Item"), driver =>
+            return Execute(GetOptions("Open Grid Item"), driver =>
             {
                 var grid = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.Container]));
                 var gridCellContainer = grid.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.CellContainer]));
@@ -1613,7 +1623,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         public BrowserCommandResult<bool> ClickRelatedCommand(string name, string subName = null)
         {
-            return this.Execute(GetOptions("Click Related Tab Command"), driver =>
+            return Execute(GetOptions("Click Related Tab Command"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Related.CommandBarButton].Replace("[NAME]", name))))
                     throw new NotFoundException($"{name} button not found. Button names are case sensitive. Please check for proper casing of button name.");
@@ -1640,9 +1650,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> CancelQuickCreate(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Cancel Quick Create"), driver =>
+            return Execute(GetOptions($"Cancel Quick Create"), driver =>
             {
                 var save = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.QuickCreate.CancelButton]),
                     "Quick Create Cancel Button is not available");
@@ -1662,12 +1672,12 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <param name="thinkTime">The think time</param>
         internal BrowserCommandResult<bool> OpenEntity(string entityName, Guid id, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Open: {entityName} {id}"), driver =>
+            return Execute(GetOptions($"Open: {entityName} {id}"), driver =>
             {
                 //https:///main.aspx?appid=98d1cf55-fc47-e911-a97c-000d3ae05a70&pagetype=entityrecord&etn=lead&id=ed975ea3-531c-e511-80d8-3863bb3ce2c8
-                var uri = new Uri(this.Browser.Driver.Url);
+                var uri = new Uri(Browser.Driver.Url);
                 var qs = HttpUtility.ParseQueryString(uri.Query.ToLower());
                 var appId = qs.Get("appid");
                 var link = $"{uri.Scheme}://{uri.Authority}/main.aspx?appid={appId}&etn={entityName}&pagetype=entityrecord&id={id}";
@@ -1698,9 +1708,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <param name="thinkTime"></param>
         internal BrowserCommandResult<bool> Save(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Save"), driver =>
+            return Execute(GetOptions($"Save"), driver =>
             {
                 var save = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.Save]),
                     "Save Buttton is not available");
@@ -1713,9 +1723,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SaveQuickCreate(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"SaveQuickCreate"), driver =>
+            return Execute(GetOptions($"SaveQuickCreate"), driver =>
             {
                 var save = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.QuickCreate.SaveAndCloseButton]),
                     "Quick Create Save Button is not available");
@@ -1738,7 +1748,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open Record Set Navigator"), driver =>
+            return Execute(GetOptions("Open Record Set Navigator"), driver =>
             {
                 // check if record set navigator parent div is set to open
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.RecordSetNavigatorOpen])))
@@ -1772,7 +1782,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Close Record Set Navigator"), driver =>
+            return Execute(GetOptions("Close Record Set Navigator"), driver =>
             {
                 var closeSpan =
                     driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.RecordSetNavCollapseIcon]));
@@ -1794,7 +1804,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.SetValue("firstname", "Test");</example>
         internal BrowserCommandResult<bool> SetValue(string field, string value)
         {
-            return this.Execute(GetOptions($"Set Value"), driver =>
+            return Execute(GetOptions($"Set Value"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", field)));
 
@@ -1848,7 +1858,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// The default index position is 0, which will be the first result record in the lookup results window. Suppy a value > 0 to select a different record if multiple are present.
         internal BrowserCommandResult<bool> SetValue(LookupItem control, int index = 0)
         {
-            return this.Execute(GetOptions($"Set Lookup Value: {control.Name}"), driver =>
+            return Execute(GetOptions($"Set Lookup Value: {control.Name}"), driver =>
             {
                 driver.WaitForTransaction(120);
 
@@ -1898,7 +1908,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// The default index position is 0, which will be the first result record in the lookup results window. Suppy a value > 0 to select a different record if multiple are present.
         internal BrowserCommandResult<bool> SetValue(LookupItem[] controls, int index = 0, bool clearFirst = true)
         {
-            return this.Execute(GetOptions($"Set ActivityParty Lookup Value: {controls.First().Name}"), driver =>
+            return Execute(GetOptions($"Set ActivityParty Lookup Value: {controls.First().Name}"), driver =>
             {
                 driver.WaitForTransaction(5);
 
@@ -2008,7 +2018,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.SetValue(new OptionSet { Name = "preferredcontactmethodcode", Value = "Email" });</example>
         public BrowserCommandResult<bool> SetValue(OptionSet option)
         {
-            return this.Execute(GetOptions($"Set OptionSet Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Set OptionSet Value: {option.Name}"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", option.Name)));
 
@@ -2054,7 +2064,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.SetValue(new BooleanItem { Name = "donotemail", Value = true });</example>
         public BrowserCommandResult<bool> SetValue(BooleanItem option)
         {
-            return this.Execute(GetOptions($"Set BooleanItem Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Set BooleanItem Value: {option.Name}"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", option.Name)));
 
@@ -2119,7 +2129,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.SetValue("birthdate", DateTime.Parse("11/1/1980"));</example>
         public BrowserCommandResult<bool> SetValue(string field, DateTime date, string format = "M/d/yyyy h:mm tt")
         {
-            return this.Execute(GetOptions($"Set Value: {field}"), driver =>
+            return Execute(GetOptions($"Set Value: {field}"), driver =>
             {
                 driver.WaitForTransaction();
 
@@ -2169,7 +2179,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>True on success</returns>
         internal BrowserCommandResult<bool> SetValue(MultiValueOptionSet option, bool removeExistingValues = false)
         {
-            return this.Execute(GetOptions($"Set MultiValueOptionSet Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Set MultiValueOptionSet Value: {option.Name}"), driver =>
             {
                 if (removeExistingValues)
                 {
@@ -2190,7 +2200,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns></returns>
         private BrowserCommandResult<bool> RemoveMultiOptions(MultiValueOptionSet option)
         {
-            return this.Execute(GetOptions($"Remove Multi Select Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Remove Multi Select Value: {option.Name}"), driver =>
             {
                 string xpath = AppElements.Xpath[AppReference.MultiSelect.SelectedRecord].Replace("[NAME]", Elements.ElementId[option.Name]);
                 // If there is already some pre-selected items in the div then we must determine if it
@@ -2237,7 +2247,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns></returns>
         private BrowserCommandResult<bool> AddMultiOptions(MultiValueOptionSet option)
         {
-            return this.Execute(GetOptions($"Add Multi Select Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Add Multi Select Value: {option.Name}"), driver =>
             {
                 string xpath = AppElements.Xpath[AppReference.MultiSelect.SelectedRecord].Replace("[NAME]", Elements.ElementId[option.Name]);
                 // If there is already some pre-selected items in the div then we must determine if it
@@ -2276,7 +2286,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<Field> GetField(string field)
         {
-            return this.Execute(GetOptions($"Get Field"), driver =>
+            return Execute(GetOptions($"Get Field"), driver =>
             {
                 Field returnField = new Field(driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", field))));
                 returnField.Name = field;
@@ -2288,7 +2298,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string> GetValue(string field)
         {
-            return this.Execute(GetOptions($"Get Value"), driver =>
+            return Execute(GetOptions($"Get Value"), driver =>
             {
                 string text = string.Empty;
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", field)));
@@ -2329,7 +2339,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.GetValue(new Lookup { Name = "primarycontactid" });</example>
         public BrowserCommandResult<string> GetValue(LookupItem control)
         {
-            return this.Execute($"Get Lookup Value: {control.Name}", driver =>
+            return Execute($"Get Lookup Value: {control.Name}", driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", control.Name)));
 
@@ -2366,7 +2376,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.GetValue(new LookupItem[] { new LookupItem { Name = "to" } });</example>
         public BrowserCommandResult<string[]> GetValue(LookupItem[] controls)
         {
-            return this.Execute($"Get ActivityParty Lookup Value: {controls.First().Name}", driver =>
+            return Execute($"Get ActivityParty Lookup Value: {controls.First().Name}", driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", controls.First().Name)));
 
@@ -2415,7 +2425,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.GetValue(new OptionSet { Name = "preferredcontactmethodcode"}); </example>
         internal BrowserCommandResult<string> GetValue(OptionSet option)
         {
-            return this.Execute($"Get OptionSet Value: {option.Name}", driver =>
+            return Execute($"Get OptionSet Value: {option.Name}", driver =>
             {
                 var text = string.Empty;
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", option.Name)));
@@ -2454,7 +2464,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.Entity.GetValue(new BooleanItem { Name = "creditonhold" });</example>
         internal BrowserCommandResult<bool> GetValue(BooleanItem option)
         {
-            return this.Execute($"Get BooleanItem Value: {option.Name}", driver =>
+            return Execute($"Get BooleanItem Value: {option.Name}", driver =>
             {
                 var check = false;
 
@@ -2501,7 +2511,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>MultiValueOptionSet object where the values field contains all the contact names</returns>
         internal BrowserCommandResult<MultiValueOptionSet> GetValue(MultiValueOptionSet option)
         {
-            return this.Execute(GetOptions($"Get Multi Select Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Get Multi Select Value: {option.Name}"), driver =>
             {
                 // If there are large number of options selected then a small expand collapse 
                 // button needs to be clicked to expose all the list elements.
@@ -2532,7 +2542,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>Guid of the Entity</returns>
         internal BrowserCommandResult<Guid> GetObjectId(int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Get Object Id"), driver =>
+            return Execute(GetOptions($"Get Object Id"), driver =>
             {
                 var objectId = driver.ExecuteScript("return Xrm.Page.data.entity.getId();");
 
@@ -2550,7 +2560,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>Entity Name of the Entity</returns>
         internal BrowserCommandResult<string> GetEntityName(int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Get Entity Name"), driver =>
+            return Execute(GetOptions($"Get Entity Name"), driver =>
             {
                 var entityName = driver.ExecuteScript("return Xrm.Page.data.entity.getEntityName();").ToString();
 
@@ -2565,7 +2575,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<List<GridItem>> GetSubGridItems(string subgridName)
         {
-            return this.Execute(GetOptions($"Get Subgrid Items for Subgrid {subgridName}"), driver =>
+            return Execute(GetOptions($"Get Subgrid Items for Subgrid {subgridName}"), driver =>
             {
                 List<GridItem> subGridRows = new List<GridItem>();
 
@@ -2625,7 +2635,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> OpenSubGridRecord(string subgridName, int index = 0)
         {
-            return this.Execute(GetOptions($"Open Subgrid record for subgrid { subgridName}"), driver =>
+            return Execute(GetOptions($"Open Subgrid record for subgrid { subgridName}"), driver =>
             {
                 //Find the Grid
                 var subGrid = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.SubGridContents].Replace("[NAME]", subgridName)));
@@ -2646,7 +2656,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<int> GetSubGridItemsCount(string subgridName)
         {
-            return this.Execute(GetOptions($"Get Subgrid Items Count for subgrid { subgridName}"), driver =>
+            return Execute(GetOptions($"Get Subgrid Items Count for subgrid { subgridName}"), driver =>
             {
                 List<GridItem> rows = GetSubGridItems(subgridName);
                 return rows.Count;
@@ -2661,7 +2671,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns></returns>
         internal BrowserCommandResult<bool> SelectLookup(LookupItem control)
         {
-            return this.Execute(GetOptions($"Select Lookup Field {control.Name}"), driver =>
+            return Execute(GetOptions($"Select Lookup Field {control.Name}"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.FieldLookupButton].Replace("[NAME]", control.Name))))
                 {
@@ -2684,7 +2694,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string> GetHeaderValue(LookupItem control)
         {
-            return this.Execute(GetOptions($"Get Header LookupItem Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Get Header LookupItem Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2695,7 +2705,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string[]> GetHeaderValue(LookupItem[] controls)
         {
-            return this.Execute(GetOptions($"Get Header Activityparty LookupItem Value {controls.First().Name}"), driver =>
+            return Execute(GetOptions($"Get Header Activityparty LookupItem Value {controls.First().Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2706,7 +2716,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string> GetHeaderValue(string control)
         {
-            return this.Execute(GetOptions($"Get Header Value {control}"), driver =>
+            return Execute(GetOptions($"Get Header Value {control}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2717,7 +2727,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<MultiValueOptionSet> GetHeaderValue(MultiValueOptionSet control)
         {
-            return this.Execute(GetOptions($"Get Header MultiValueOptionSet Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Get Header MultiValueOptionSet Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2728,7 +2738,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string> GetHeaderValue(OptionSet control)
         {
-            return this.Execute(GetOptions($"Get Header OptionSet Value {control}"), driver =>
+            return Execute(GetOptions($"Get Header OptionSet Value {control}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2739,7 +2749,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> GetHeaderValue(BooleanItem control)
         {
-            return this.Execute(GetOptions($"Get Header BooleanItem Value {control}"), driver =>
+            return Execute(GetOptions($"Get Header BooleanItem Value {control}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2750,7 +2760,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<string> GetStatusFromFooter()
         {
-            return this.Execute(GetOptions($"Get Status value from footer"), driver =>
+            return Execute(GetOptions($"Get Status value from footer"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityFooter])))
                     throw new NotFoundException("Unable to find footer on the form");
@@ -2769,7 +2779,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(string field, string value)
         {
-            return this.Execute(GetOptions($"Set Header Value {field}"), driver =>
+            return Execute(GetOptions($"Set Header Value {field}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2782,7 +2792,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(LookupItem control)
         {
-            return this.Execute(GetOptions($"Set Header LookupItem Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Set Header LookupItem Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2795,7 +2805,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(LookupItem[] controls)
         {
-            return this.Execute(GetOptions($"Set Header Activityparty LookupItem Value {controls[0].Name}"), driver =>
+            return Execute(GetOptions($"Set Header Activityparty LookupItem Value {controls[0].Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2808,7 +2818,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(MultiValueOptionSet control)
         {
-            return this.Execute(GetOptions($"Set Header MultiValueOptionSet Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Set Header MultiValueOptionSet Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2821,7 +2831,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(OptionSet control)
         {
-            return this.Execute(GetOptions($"Set Header OptionSet Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Set Header OptionSet Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2834,7 +2844,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(BooleanItem control)
         {
-            return this.Execute(GetOptions($"Set Header BooleanItem Value {control.Name}"), driver =>
+            return Execute(GetOptions($"Set Header BooleanItem Value {control.Name}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2847,7 +2857,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetHeaderValue(string field, DateTime date, string format)
         {
-            return this.Execute(GetOptions($"Set Header Value {field}"), driver =>
+            return Execute(GetOptions($"Set Header Value {field}"), driver =>
             {
                 if (!driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Entity.EntityHeader])))
                     throw new NotFoundException("Unable to find header on the form");
@@ -2860,7 +2870,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> ClearValue(string fieldName)
         {
-            return this.Execute(GetOptions($"Clear Field {fieldName}"), driver =>
+            return Execute(GetOptions($"Clear Field {fieldName}"), driver =>
             {
                 SetValue(fieldName, String.Empty);
 
@@ -2870,7 +2880,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> ClearValue(LookupItem control, bool removeAll = true)
         {
-            return this.Execute(GetOptions($"Clear Field {control.Name}"), driver =>
+            return Execute(GetOptions($"Clear Field {control.Name}"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldLookupFieldContainer].Replace("[NAME]", control.Name)));
 
@@ -2941,7 +2951,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> ClearValue(OptionSet control)
         {
-            return this.Execute(GetOptions($"Clear Field {control.Name}"), driver =>
+            return Execute(GetOptions($"Clear Field {control.Name}"), driver =>
             {
                 control.Value = "-1";
                 SetValue(control);
@@ -2952,7 +2962,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> ClearValue(MultiValueOptionSet control)
         {
-            return this.Execute(GetOptions($"Clear Field {control.Name}"), driver =>
+            return Execute(GetOptions($"Clear Field {control.Name}"), driver =>
             {
                 RemoveMultiOptions(control);
 
@@ -2962,7 +2972,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SelectForm(string formName)
         {
-            return this.Execute(GetOptions($"Select Form {formName}"), driver =>
+            return Execute(GetOptions($"Select Form {formName}"), driver =>
             {
                 driver.WaitForTransaction();
 
@@ -2997,7 +3007,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> AddValues(LookupItem[] controls, int index = 0)
         {
-            return this.Execute(GetOptions($"Add values {controls.First().Name}"), driver =>
+            return Execute(GetOptions($"Add values {controls.First().Name}"), driver =>
             {
                 SetValue(controls, index, false);
 
@@ -3007,11 +3017,11 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> RemoveValues(LookupItem[] controls)
         {
-            return this.Execute(GetOptions($"Remove values {controls.First().Name}"), driver =>
+            return Execute(GetOptions($"Remove values {controls.First().Name}"), driver =>
             {
                 foreach (var control in controls)
                 {
-                    ClearValue(control, false);
+                    ClearValue(control);
                 }
 
                 return true;
@@ -3023,7 +3033,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         #region Lookup 
         internal BrowserCommandResult<bool> OpenLookupRecord(int index)
         {
-            return this.Execute(GetOptions("Select Lookup Record"), driver =>
+            return Execute(GetOptions("Select Lookup Record"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Lookup.LookupResultRows])))
                 {
@@ -3043,7 +3053,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SearchLookupField(LookupItem control, string searchCriteria)
         {
-            return this.Execute(GetOptions("Search Lookup Record"), driver =>
+            return Execute(GetOptions("Search Lookup Record"), driver =>
             {
                 //Click in the field and enter values
                 control.Value = searchCriteria;
@@ -3058,7 +3068,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         internal BrowserCommandResult<bool> SelectLookupRelatedEntity(string entityName)
         {
             //Click the Related Entity on the Lookup Flyout
-            return this.Execute(GetOptions($"Select Lookup Related Entity {entityName}"), driver =>
+            return Execute(GetOptions($"Select Lookup Related Entity {entityName}"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Lookup.RelatedEntityLabel].Replace("[NAME]", entityName))))
                     driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Lookup.RelatedEntityLabel].Replace("[NAME]", entityName))).Click(true);
@@ -3073,7 +3083,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SwitchLookupView(string viewName)
         {
-            return this.Execute(GetOptions($"Select Lookup View {viewName}"), driver =>
+            return Execute(GetOptions($"Select Lookup View {viewName}"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Lookup.ChangeViewButton])))
                 {
@@ -3102,7 +3112,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SelectLookupNewButton()
         {
-            return this.Execute(GetOptions("Click New Lookup Button"), driver =>
+            return Execute(GetOptions("Click New Lookup Button"), driver =>
             {
                 if (driver.HasElement(By.XPath(AppElements.Xpath[AppReference.Lookup.NewButton])))
                 {
@@ -3137,9 +3147,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>True on success, False on failure to invoke any action</returns>
         internal BrowserCommandResult<bool> OpenAndClickPopoutMenu(By menuName, By menuItemName, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute($"Open menu", driver =>
+            return Execute($"Open menu", driver =>
             {
                 driver.ClickWhenAvailable(menuName);
                 try
@@ -3160,9 +3170,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> Delete(int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Delete Entity"), driver =>
+            return Execute(GetOptions($"Delete Entity"), driver =>
             {
                 var deleteBtn = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.Delete]),
     "Delete Button is not available");
@@ -3178,9 +3188,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         internal BrowserCommandResult<bool> Assign(string userOrTeamToAssign, int thinkTime = Constants.DefaultThinkTime)
         {
             //Click the Assign Button on the Entity Record
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Assign Entity"), driver =>
+            return Execute(GetOptions($"Assign Entity"), driver =>
             {
                 var assignBtn = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.Assign]),
                     "Assign Button is not available");
@@ -3193,9 +3203,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> SwitchProcess(string processToSwitchTo, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Switch BusinessProcessFlow"), driver =>
+            return Execute(GetOptions($"Switch BusinessProcessFlow"), driver =>
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.Entity.ProcessButton]), new TimeSpan(0, 0, 5));
                 var processBtn = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Entity.ProcessButton]));
@@ -3223,7 +3233,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> CloseOpportunity(bool closeAsWon, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
             string xPathQuery = String.Empty;
 
             if (closeAsWon)
@@ -3231,7 +3241,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             else
                 xPathQuery = AppElements.Xpath[AppReference.Entity.CloseOpportunityLoss];
 
-            return this.Execute(GetOptions($"Close Opportunity"), driver =>
+            return Execute(GetOptions($"Close Opportunity"), driver =>
             {
                 var closeBtn = driver.WaitUntilAvailable(By.XPath(xPathQuery), "Opportunity Close Button is not available");
 
@@ -3244,9 +3254,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         }
         internal BrowserCommandResult<bool> CloseOpportunity(double revenue, DateTime closeDate, string description, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Close Opportunity"), driver =>
+            return Execute(GetOptions($"Close Opportunity"), driver =>
             {
                 SetValue(Elements.ElementId[AppReference.Dialogs.CloseOpportunity.ActualRevenueId], revenue.ToString());
                 SetValue(Elements.ElementId[AppReference.Dialogs.CloseOpportunity.CloseDateId], closeDate);
@@ -3272,7 +3282,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>True on success, False on failure to invoke any action</returns>
         internal BrowserCommandResult<bool> OpenAndClickPopoutMenu(string popoutName, string popoutItemName, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.OpenAndClickPopoutMenu(By.XPath(Elements.Xpath[popoutName]), By.XPath(Elements.Xpath[popoutItemName]), thinkTime);
+            return OpenAndClickPopoutMenu(By.XPath(Elements.Xpath[popoutName]), By.XPath(Elements.Xpath[popoutItemName]), thinkTime);
         }
 
 
@@ -3284,7 +3294,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>True on success, False/Exception on failure to invoke any action</returns>
         internal BrowserCommandResult<bool> ClickButton(By by)
         {
-            return this.Execute($"Open Timeline Add Post Popout", driver =>
+            return Execute($"Open Timeline Add Post Popout", driver =>
             {
                 var button = driver.WaitUntilAvailable(by);
                 if (button.TagName.Equals("button"))
@@ -3341,7 +3351,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute($"Select Tab", driver =>
+            return Execute($"Select Tab", driver =>
             {
                 IWebElement tabList = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TabList]));
 
@@ -3441,7 +3451,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <returns>True on success, Exception on failure to invoke any action</returns>
         internal BrowserCommandResult<bool> SetValue(string fieldName, string value, string expectedTagName)
         {
-            return this.Execute($"SetValue (Generic)", driver =>
+            return Execute($"SetValue (Generic)", driver =>
             {
                 var inputbox = driver.WaitUntilAvailable(By.XPath(Elements.Xpath[fieldName]));
                 if (expectedTagName.Equals(inputbox.TagName, StringComparison.InvariantCultureIgnoreCase))
@@ -3470,7 +3480,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmApp.BusinessProcessFlow.SetValue("firstname", "Test");</example>
         internal BrowserCommandResult<bool> BPFSetValue(string field, string value)
         {
-            return this.Execute(GetOptions($"Set BPF Value"), driver =>
+            return Execute(GetOptions($"Set BPF Value"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.BusinessProcessFlow.TextFieldContainer].Replace("[NAME]", field)));
 
@@ -3507,7 +3517,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmBrowser.BusinessProcessFlow.SetValue(new OptionSet { Name = "preferredcontactmethodcode", Value = "Email" });</example>
         public BrowserCommandResult<bool> BPFSetValue(OptionSet option)
         {
-            return this.Execute(GetOptions($"Set BPF Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Set BPF Value: {option.Name}"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.Entity.TextFieldContainer].Replace("[NAME]", option.Name)));
 
@@ -3538,7 +3548,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example>xrmBrowser.BusinessProcessFlow.SetValue(new BooleanItem { Name = "preferredcontactmethodcode"});</example>
         public BrowserCommandResult<bool> BPFSetValue(BooleanItem option)
         {
-            return this.Execute(GetOptions($"Set BPF Value: {option.Name}"), driver =>
+            return Execute(GetOptions($"Set BPF Value: {option.Name}"), driver =>
             {
                 var fieldContainer = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.BusinessProcessFlow.BooleanFieldContainer].Replace("[NAME]", option.Name)));
                 if (!option.Value)
@@ -3576,7 +3586,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <example> xrmBrowser.BusinessProcessFlow.SetValue("birthdate", DateTime.Parse("11/1/1980"));</example>
         public BrowserCommandResult<bool> BPFSetValue(string field, DateTime date, string format = "MM dd yyyy")
         {
-            return this.Execute(GetOptions($"Set BPF Value: {field}"), driver =>
+            return Execute(GetOptions($"Set BPF Value: {field}"), driver =>
             {
                 var dateField = AppElements.Xpath[AppReference.BusinessProcessFlow.DateTimeFieldContainer].Replace("[FIELD]", field);
 
@@ -3591,36 +3601,36 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                         //fieldElement.SendKeys(Keys.Enter);
 
                         fieldElement.Click();
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.Click();
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(date.ToString(format), true);
-                        this.Browser.ThinkTime(500);
+                        Browser.ThinkTime(500);
                         fieldElement.SendKeys(Keys.Tab);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                     }
                     else
                     {
                         fieldElement.Click();
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.Click();
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Backspace);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(date.ToString(format));
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                         fieldElement.SendKeys(Keys.Tab);
-                        this.Browser.ThinkTime(250);
+                        Browser.ThinkTime(250);
                     }
                 }
                 else
@@ -3632,9 +3642,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> NextStage(string stageName, Field businessProcessFlowField = null, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Next Stage"), driver =>
+            return Execute(GetOptions($"Next Stage"), driver =>
             {
                 //Find the Business Process Stages
                 var processStages = driver.FindElements(By.XPath(AppElements.Xpath[AppReference.BusinessProcessFlow.NextStage_UCI]));
@@ -3686,7 +3696,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SelectStage(string stageName, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Select Stage: {stageName}"), driver =>
+            return Execute(GetOptions($"Select Stage: {stageName}"), driver =>
             {
 
                 //Find the Business Process Stages
@@ -3714,9 +3724,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> SetActive(string stageName = "", int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Set Active Stage: {stageName}"), driver =>
+            return Execute(GetOptions($"Set Active Stage: {stageName}"), driver =>
             {
                 if (!String.IsNullOrEmpty(stageName))
                 {
@@ -3736,7 +3746,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> BPFPin(string stageName, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Pin BPF: {stageName}"), driver =>
+            return Execute(GetOptions($"Pin BPF: {stageName}"), driver =>
             {
                 //Click the BPF Stage
                 SelectStage(stageName, 0);
@@ -3755,7 +3765,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
         internal BrowserCommandResult<bool> BPFClose(string stageName, int thinkTime = Constants.DefaultThinkTime)
         {
-            return this.Execute(GetOptions($"Close BPF: {stageName}"), driver =>
+            return Execute(GetOptions($"Close BPF: {stageName}"), driver =>
             {
                 //Click the BPF Stage
                 SelectStage(stageName, 0);
@@ -3785,7 +3795,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Global Search: {criteria}"), driver =>
+            return Execute(GetOptions($"Global Search: {criteria}"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Navigation.SearchButton]),
                 new TimeSpan(0, 0, 5),
@@ -3837,7 +3847,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Filter With: {entity}"), driver =>
+            return Execute(GetOptions($"Filter With: {entity}"), driver =>
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Filter]),
                                         new TimeSpan(0, 0, 10),
@@ -3875,7 +3885,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Filter With: {value}"), driver =>
+            return Execute(GetOptions($"Filter With: {value}"), driver =>
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.GroupContainer].Replace("[NAME]", filterBy)),
                                         new TimeSpan(0, 0, 10),
@@ -3910,7 +3920,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Open Global Search Record"), driver =>
+            return Execute(GetOptions($"Open Global Search Record"), driver =>
             {
                 var searchType = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type])).GetAttribute("value");
 
@@ -3964,7 +3974,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Change Search Type"), driver =>
+            return Execute(GetOptions($"Change Search Type"), driver =>
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type]),
                                         Constants.DefaultTimeout,
@@ -3991,9 +4001,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         #region Dashboard
         internal BrowserCommandResult<bool> SelectDashboard(string dashboardName, int thinkTime = Constants.DefaultThinkTime)
         {
-            this.Browser.ThinkTime(thinkTime);
+            Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions($"Select Dashboard"), driver =>
+            return Execute(GetOptions($"Select Dashboard"), driver =>
             {
                 //Click the drop-down arrow
                 driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Dashboard.DashboardSelector]));

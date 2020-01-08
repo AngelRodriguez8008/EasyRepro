@@ -15,20 +15,15 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             SwitchToPopup();
         }
 
-        private static BrowserCommandOptions NavigationRetryOptions
-        {
-            get
-            {
-                return new BrowserCommandOptions(
-                    Constants.DefaultTraceSource,
-                    "Add User",
-                    0,
-                    1000,
-                    null,
-                    true,
-                    typeof(StaleElementReferenceException));
-            }
-        }
+        private static BrowserCommandOptions NavigationRetryOptions =>
+            new BrowserCommandOptions(
+                Constants.DefaultTraceSource,
+                "Add User",
+                1,
+                1000,
+                null,
+                true,
+                typeof(StaleElementReferenceException));
 
         public BrowserCommandResult<bool> CreateUser(string firstname, string lastname, string displayname, string username, int thinkTime = Constants.DefaultThinkTime)
         {
