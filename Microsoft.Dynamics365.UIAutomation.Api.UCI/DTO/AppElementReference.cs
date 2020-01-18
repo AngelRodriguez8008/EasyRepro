@@ -129,7 +129,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             public static string EntityOptionsetStatusComboButton = "Entity_OptionsetStatusComboButton";
             public static string EntityOptionsetStatusComboList = "Entity_OptionsetStatusComboList";
             public static string EntityOptionsetStatusTextValue = "Entity_OptionsetStatusTextValue";
-
+            public static string HeaderFlyoutButton = "Entity_HeaderFlyoutButton";
         }
 
         public static class CommandBar
@@ -332,7 +332,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             { "Entity_LookupFieldResultList", "//*[contains(@data-id, '[NAME].fieldControl-LookupResultsDropdown_[NAME]_tab')]" },
             { "Entity_LookupFieldResultListItem", "//*[contains(@data-id, '[NAME].fieldControl-LookupResultsDropdown_[NAME]_resultsContainer')]" },
             { "Entity_LookupFieldHoverExistingValue", "//*[contains(@data-id, '[NAME].fieldControl-LookupResultsDropdown_[NAME]_SelectedRecordList')]" },
-            { "Entity_TextFieldLookupFieldContainer", "//div[@role='tabpanel']/parent::*//*[contains(@data-id, '[NAME].fieldControl-Lookup_[NAME]')]" },
+            { "Entity_TextFieldLookupFieldContainer", "//*[contains(@data-id, '[NAME].fieldControl-Lookup_[NAME]')]" },
             { "Entity_RecordSetNavigatorOpen", "//button[contains(@data-lp-id, 'recordset-navigator')]" },
             { "Entity_RecordSetNavigator", "//button[contains(@data-lp-id, 'recordset-navigator')]" },
             { "Entity_RecordSetNavList", "//ul[contains(@data-id, 'recordSetNaveList')]" },
@@ -371,7 +371,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             { "Entity_OptionsetStatusComboButton", "//div[contains(@id, '[NAME].fieldControl-pickliststatus-comboBox_button')]"},
             { "Entity_OptionsetStatusComboList", "//ul[contains(@id, '[NAME].fieldControl-pickliststatus-comboBox_list')]"},
             { "Entity_OptionsetStatusTextValue", "//span[contains(@id, '[NAME].fieldControl-pickliststatus-comboBox_text-value')]"},
-                        
+            { "Entity_HeaderFlyoutButton","//button[contains(@id,'headerFieldsExpandButton')]" },
+            
             //CommandBar
             { "Cmd_Container"       , "//ul[contains(@data-lp-id,\"commandbar-Form\")]"},
             { "Cmd_ContainerGrid"       , "//ul[contains(@data-lp-id,\"commandbar-HomePageGrid\")]"},
