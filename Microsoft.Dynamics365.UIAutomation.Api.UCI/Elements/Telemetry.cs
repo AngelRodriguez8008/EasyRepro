@@ -74,7 +74,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// <exception cref="System.InvalidOperationException">UCI Performance Mode is not enabled.  Please enable performance mode in the Options before tracking performance telemetry.</exception>
         public void TrackPerformanceEvents(Dictionary<string, string> additionalProperties = null, Dictionary<string, double> additionalMetrics = null)
         {
-            if (!_client.Browser.Options.UCIPerformanceMode) throw new InvalidOperationException("UCI Performance Mode is not enabled.  Please enable performance mode in the Options before tracking performance telemetry.");
+            if (!_client.Browser.Options.UCIPerformanceMode) 
+                throw new InvalidOperationException("UCI Performance Mode is not enabled.  Please enable performance mode in the Options before tracking performance telemetry.");
             ShowHidePerformanceWidget();
 
             Dictionary<string, string> metadata = GetMetadataMarkers();

@@ -44,21 +44,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
                 driver.WaitUntilClickable(By.XPath(Elements.Xpath[Reference.Grid.ViewSelector]),
                                          new TimeSpan(0,0,20),
-                                         d=> { d.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Grid.ViewSelector])); },
-                                         d=> { throw new Exception("Unable to click the View Picker"); });                
+                                         e => e.Click(),
+                                         d => throw new Exception("Unable to click the View Picker"));
 
-                driver.WaitUntilVisible(By.ClassName(Elements.CssClass[Reference.Grid.ViewContainer]),
+                var classToFind = Elements.CssClass[Reference.Grid.ViewContainer];
+                driver.WaitUntilVisible(By.ClassName(classToFind),
                                         new TimeSpan(0, 0, 20),
                                         null,
                                         d => 
                                         {
                                             //Fix for Firefox not clicking the element in the event above. Issue with the driver. 
                                             d.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Grid.ViewSelector]));
-                                            driver.WaitUntilVisible(By.ClassName(Elements.CssClass[Reference.Grid.ViewContainer]), new TimeSpan(0, 0, 3), null, e => { throw new Exception("View Picker menu is not avilable"); });
-
+                                            driver.WaitUntilVisible(By.ClassName(classToFind), new TimeSpan(0, 0, 3), null, 
+                                                e => throw new Exception("View Picker menu is not avilable"));
                                         });
 
-                var viewContainer = driver.FindElement(By.ClassName(Elements.CssClass[Reference.Grid.ViewContainer]));
+                var viewContainer = driver.FindElement(By.ClassName(classToFind));
                 var viewItems = viewContainer.FindElements(By.TagName("li"));
 
                 foreach (var viewItem in viewItems)

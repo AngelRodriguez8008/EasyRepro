@@ -568,9 +568,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
                       , new TimeSpan(0, 0, 60),
                       e =>
                       {
-                          e.WaitForPageToLoad();
-                          e.SwitchTo().Frame(0);
-                          e.WaitForPageToLoad();
+                          driver.WaitForPageToLoad();
+                          driver.SwitchTo().Frame(0);
+                          driver.WaitForPageToLoad();
                       },
                       f => { throw new Exception("App Load failed. "); });
                 }

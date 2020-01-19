@@ -6,6 +6,7 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Security;
 using System.Threading;
@@ -114,14 +115,14 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
             if (!waitingForOtc)
             {
-                Thread.Sleep(1000);
+                ThinkTime(1000);
 
                 if (driver.IsVisible(By.Id("aadTile")))
                 {
                     driver.FindElement(By.Id("aadTile")).Click(true);
                 }
 
-                Thread.Sleep(1000);
+                ThinkTime(1000);
 
                 //If expecting redirect then wait for redirect to trigger
                 if (redirectAction != null)
@@ -134,7 +135,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 }
 
                 EnterPassword(driver, password);
-                Thread.Sleep(1000);
+                ThinkTime(1000);
             }
 
             EnterOneTimeCode(driver, mfaSecrectKey);
@@ -142,12 +143,12 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             if (mfaSecrectKey == null)
                 ClickStaySignedIn(driver);
 
-            Thread.Sleep(1000);
+            ThinkTime(1000);
 
             var xpathToMainPage = By.XPath(Elements.Xpath[Reference.Login.CrmMainPage]);
             driver.WaitUntilVisible(xpathToMainPage
                 , new TimeSpan(0, 0, 60),
-                SwitchToDefaultContent,
+                e => SwitchToDefaultContent(driver),
                 f => throw new Exception($"Login page failed. {Reference.Login.CrmMainPage} not found."));
 
             return LoginResult.Success;
@@ -174,7 +175,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             return result;
         }
 
-        private static bool EnterUserName(IWebDriver driver, SecureString username)
+        private bool EnterUserName(IWebDriver driver, SecureString username)
         {
             var input = driver.WaitUntilAvailable(By.XPath(Elements.Xpath[Reference.Login.UserId]), new TimeSpan(0, 0, 30));
             if (input == null)
@@ -205,8 +206,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     input.Submit();
                     return;
                 }
-                catch
+                catch (Exception e)
                 {
+                    Trace.TraceWarning($"An Error ocur entering OTC. Exception: {e}");
                     if (attempts >= Constants.DefaultRetryAttempts)
                         throw;
                     Thread.Sleep(Constants.DefaultRetryDelay);
@@ -246,7 +248,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
                          , new TimeSpan(0, 0, 60),
-                         SwitchToDefaultContent,
+                         e => SwitchToDefaultContent(driver),
                          f => throw new Exception("Login page failed."));
 
                 return LoginResult.Success;
@@ -272,11 +274,11 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 , new TimeSpan(0, 0, 60),
             e =>
             {
-                e.WaitForPageToLoad();
-                e.SwitchTo().Frame(0);
-                e.WaitForPageToLoad();
+                d.WaitForPageToLoad();
+                d.SwitchTo().Frame(0);
+                d.WaitForPageToLoad();
             },
-                f => { throw new Exception("Login page failed."); });
+                f => throw new Exception("Login page failed."));
 
         }
 
@@ -309,9 +311,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 , new TimeSpan(0, 0, 60),
                 e =>
                 {
-                    e.WaitForPageToLoad();
-                    e.SwitchTo().Frame(0);
-                    e.WaitForPageToLoad();
+                    d.WaitForPageToLoad();
+                    d.SwitchTo().Frame(0);
+                    d.WaitForPageToLoad();
                 },
                 f => throw new Exception("Login page failed."));
 
@@ -376,7 +378,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             var xpathToAppContainer = By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppContainer]);
             var xpathToAppTile = By.XPath(AppElements.Xpath[AppReference.Navigation.UCIAppTile].Replace("[NAME]", appName));
 
-            var tileContainer = driver.WaitUntilAvailable(xpathToAppContainer, new TimeSpan(0, 0, 30));
+            var tileContainer = driver.WaitUntilAvailable(xpathToAppContainer, new TimeSpan(0, 0, 15));
 
             var appTile = tileContainer?.FindElement(xpathToAppTile);
             if (appTile == null)
@@ -1238,8 +1240,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                 driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Grid.ViewSelector]),
                     new TimeSpan(0, 0, 20),
-                    d => { d.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Grid.ViewSelector])); },
-                    d => { throw new Exception("Unable to click the View Picker"); });
+                    e => e.Click(),
+                    d => throw new Exception("Unable to click the View Picker"));
 
                 var viewContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.Grid.ViewContainer]));
                 var viewItems = viewContainer.FindElements(By.TagName("li"));
@@ -2166,17 +2168,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                             driver.WaitForTransaction();
                         }
                     }
+                    ThinkTime(1000);
+                    var value = date.ToString(format);
+                    fieldElement.SendKeys(value);
 
-                    fieldElement.SendKeys(date.ToString(format));
-                    fieldElement.SendKeys(Keys.Enter);
-                    
                     try
                     {
-                        driver.WaitFor(d => fieldElement.GetAttribute("value") == date.ToString(format));
+                        driver.WaitFor(d => fieldElement.GetAttribute("value") == value);
                     }
                     catch (WebDriverTimeoutException ex)
                     {
-                        throw new InvalidOperationException($"Timeout after 30 seconds. Expected: {date.ToString(format)}. Actual: {fieldElement.GetAttribute("value")}", ex);
+                        throw new InvalidOperationException($"Timeout after 30 seconds. Expected: {value}. Actual: {fieldElement.GetAttribute("value")}", ex);
                     }
                     driver.ClearFocus();
                 }
@@ -2369,7 +2371,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                 {
                     throw new InvalidOperationException($"Field: {control.Name} Does not exist", ex);
                 }
-                if(!found)
+                if (!found)
                     throw new InvalidOperationException($"Field: {control.Name} Does not exist");
 
                 return lookupValue;
@@ -3807,17 +3809,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
             return Execute(GetOptions($"Global Search: {criteria}"), driver =>
             {
-                driver.WaitUntilClickable(By.XPath(AppElements.Xpath[AppReference.Navigation.SearchButton]),
-                new TimeSpan(0, 0, 5),
-                d => { driver.ClickWhenAvailable(By.XPath(AppElements.Xpath[AppReference.Navigation.SearchButton])); },
-                d => { throw new InvalidOperationException("The Global Search button is not available."); });
+                var xpathToButton = By.XPath(AppElements.Xpath[AppReference.Navigation.SearchButton]);
+                IWebElement openSearchButton =  driver.WaitUntilClickable(xpathToButton, new TimeSpan(0, 0, 5),
+                                            failureCallback: d => throw new InvalidOperationException("The Global Search button is not available."));
+                openSearchButton.Click();
 
-
-                if (driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Text])))
+                var xpathToTextBox = By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Text]);
+                var textbox = driver.WaitUntilVisible(xpathToTextBox, failureCallback: d => throw new InvalidOperationException("The Global Search is not available."));
+                if (textbox != null)
                 {
                     var searchType = driver.WaitUntilAvailable(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type])).GetAttribute("value");
                     IWebElement button = null;
-
                     if (searchType == "1") //Categorized Search
                     {
                         button = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.CategorizedSearchButton]));
@@ -3827,21 +3829,15 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                         button = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.RelevanceSearchButton]));
                     }
 
-                    var input = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Text]));
-
-                    if (button != null && input != null)
+                    if (button != null)
                     {
-                        input.SendKeys(criteria, true);
+                        textbox.SendKeys(criteria, true);
                         button.Click(true);
                     }
                     else
                     {
                         throw new InvalidOperationException("The Global Search text field is not available.");
                     }
-                }
-                else
-                {
-                    throw new InvalidOperationException("The Global Search is not available.");
                 }
                 return true;
             });
@@ -3909,11 +3905,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                                             filter.Click();
                                         },
-                                        f =>
-                                        {
-                                            throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available.");
-                                        }
-                                        );
+                                        f => throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available."));
 
                 return true;
             });
@@ -3939,7 +3931,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                     driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]),
                                             Constants.DefaultTimeout,
                                             null,
-                                            d => { throw new InvalidOperationException("Search Results is not available"); });
+                                            d => throw new InvalidOperationException("Search Results is not available"));
 
 
                     var resultsContainer = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Container]));

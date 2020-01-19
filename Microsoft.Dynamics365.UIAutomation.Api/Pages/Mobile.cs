@@ -28,7 +28,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
         {
             Browser.ThinkTime(thinkTime);
 
-            return this.Execute(GetOptions("Open Mobile Page"), driver =>
+            return Execute(GetOptions("Open Mobile Page"), driver =>
             {
                 Uri baseUri = new Uri(driver.Url);
 
@@ -36,8 +36,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
                 driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Mobile.Page])
                     , new TimeSpan(0, 0, 60),
-                    e => { e.WaitForPageToLoad(); },
-                    f => { throw new Exception("Mobile page failed to load."); });
+                    e => driver.WaitForPageToLoad(),
+                    f => throw new Exception("Mobile page failed to load."));
 
                 return true;
             });

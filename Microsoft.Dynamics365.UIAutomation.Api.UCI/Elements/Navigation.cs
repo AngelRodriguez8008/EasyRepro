@@ -18,9 +18,10 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         /// Opens the App supplied
         /// </summary>
         /// <param name="appName">Name of the app to open</param>
-        public void OpenApp(string appName)
+        /// <param name="thinkTime">Wait Time in secounds prior to click</param>
+        public void OpenApp(string appName, int thinkTime = Constants.DefaultThinkTime)
         {
-            _client.OpenApp(appName);
+            _client.OpenApp(appName, thinkTime);
         }
 
         /// <summary>

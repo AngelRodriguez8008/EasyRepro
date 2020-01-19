@@ -54,7 +54,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
 
         public BrowserCommandResult<LoginResult> Login(Uri uri)
         {
-            if (this.Browser.Options.Credentials.Username== null)
+            if (this.Browser.Options.Credentials.Username == null)
                 return PassThroughLogin(uri);
             else
                 return this.Execute(GetOptions("Login"), this.Login, uri, this.Browser.Options.Credentials.Username, this.Browser.Options.Credentials.Password, default(Action<LoginRedirectEventArgs>));
@@ -89,7 +89,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             var redirect = false;
             bool online = !(this.OnlineDomains != null && !this.OnlineDomains.Any(d => uri.Host.EndsWith(d)));
             driver.Navigate().GoToUrl(uri);
-            
+
             if (online)
             {
                 if (driver.IsVisible(By.Id("use_another_account_link")))
@@ -134,22 +134,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
                     if (driver.IsVisible(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
                     {
                         driver.ClickWhenAvailable(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn]));
-                        
+
                         //Click didn't work so use submit
-                        if(driver.HasElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
+                        if (driver.HasElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])))
                             driver.FindElement(By.XPath(Elements.Xpath[Reference.Login.StaySignedIn])).Submit();
                     }
 
                     driver.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
                         , new TimeSpan(0, 0, 60),
-                        e => 
+                        e =>
                         {
-                            e.WaitForPageToLoad();
+                            driver.WaitForPageToLoad();
                             MarkOperation(driver);
-                            e.SwitchTo().Frame(0);
-                            e.WaitForPageToLoad();
+                            driver.SwitchTo().Frame(0);
+                            driver.WaitForPageToLoad();
                         },
-                        f => { throw new Exception("Login page failed."); });
+                        f => throw new Exception("Login page failed."));
                 }
             }
 
@@ -166,12 +166,12 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
                        , new TimeSpan(0, 0, 60),
                        e =>
                        {
-                           e.WaitForPageToLoad();
+                           driver.WaitForPageToLoad();
                            MarkOperation(driver);
-                           e.SwitchTo().Frame(0);
-                           e.WaitForPageToLoad();
+                           driver.SwitchTo().Frame(0);
+                           driver.WaitForPageToLoad();
                        },
-                       f => { throw new Exception("Login page failed."); });
+                       f => throw new Exception("Login page failed."));
                 return LoginResult.Success;
             });
         }
@@ -198,13 +198,13 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
             //Wait for CRM Page to load
             d.WaitUntilVisible(By.XPath(Elements.Xpath[Reference.Login.CrmMainPage])
                 , new TimeSpan(0, 0, 60),
-            e =>
-            {
-                e.WaitForPageToLoad();
-                e.SwitchTo().Frame(0);
-                e.WaitForPageToLoad();
-            },
-                f => { throw new Exception("Login page failed."); });
+                e =>
+                {
+                    d.WaitForPageToLoad();
+                    d.SwitchTo().Frame(0);
+                    d.WaitForPageToLoad();
+                },
+                f => throw new Exception("Login page failed."));
 
         }
     }
