@@ -3859,10 +3859,8 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
                                         new TimeSpan(0, 0, 10),
                                         e =>
                                         {
-                                            var picklist = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Filter]));
-                                            var options = picklist.FindElements(By.TagName("option"));
-
-                                            picklist.Click();
+                                            var options = e.FindElements(By.TagName("option"));
+                                            e.Click();
 
                                             IWebElement option = options.FirstOrDefault(x => x.Text == entity);
 
@@ -3871,11 +3869,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
 
                                             option.Click();
                                         },
-                                        f =>
-                                        {
-                                            throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available.");
-                                        }
-                                        );
+                                        f => throw new InvalidOperationException("Filter With picklist is not available. The timeout period elapsed waiting for the picklist to be available."));
 
                 return true;
             });
@@ -3980,21 +3974,17 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
             {
                 driver.WaitUntilVisible(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type]),
                                         Constants.DefaultTimeout,
-                                        c =>
+                                        e =>
                                         {
-                                            var select = driver.FindElement(By.XPath(AppElements.Xpath[AppReference.GlobalSearch.Type]));
-                                            var options = select.FindElements(By.TagName("option"));
-
+                                            var options = e.FindElements(By.TagName("option"));
                                             var option = options.FirstOrDefault(x => x.Text.Trim() == type);
+                                            if (option == null)
+                                                return;
 
-                                            if (option != null)
-                                            {
-                                                select.Click(true);
-                                                option.Click(true);
-                                            }
-
+                                            e.Click(true);
+                                            option.Click(true);
                                         },
-                                        d => { throw new InvalidOperationException("Search Results is not available"); });
+                                        d => throw new InvalidOperationException("Search Results is not available"));
                 return true;
             });
         }

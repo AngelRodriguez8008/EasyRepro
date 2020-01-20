@@ -112,7 +112,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api
         {
             Browser.ThinkTime(thinkTime);
 
-            return Execute(GetOptions($"Global Search"), driver =>
+            return Execute(GetOptions("Global Search"), driver =>
             {
                 driver.WaitUntilClickable(By.XPath(Elements.Xpath[Reference.GlobalSearch.SearchText]),
                     new TimeSpan(0, 0, 10),
