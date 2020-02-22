@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using System;
+using System.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI.ApiTests
@@ -46,6 +47,16 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI.ApiTests
                 Assert.IsNull(_xrmApp, "Browser still open");
                 Assert.IsNull(_client, "Browser still open");
             }
+        }
+
+        [TestMethod]
+        public void Test_Traces_in_AzurePipeline()
+        {
+            trace.Log("Start");
+            Console.WriteLine("Console.WriteLine");
+            Trace.WriteLine("Trace.WriteLine");
+            trace.Log("End");
+            Assert.Fail("This test print comments");
         }
     }
 }
