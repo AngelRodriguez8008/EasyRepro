@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 
 namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
@@ -11,7 +13,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
         private readonly string _loggerName;
 
         public TracingService(Type type, string traceSource)
-            : this(type.FullName, traceSource) { }
+            : this(type.Name, traceSource) { }
 
         public TracingService(string loggerName, string traceSource) 
         {
@@ -30,9 +32,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
                 var method = stackTrace.GetFrame(stackTraceIndex)?.GetMethod()?.Name;
                 Write(eventType, $"{method}: {message.Format()}");
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored
+                TraceFail(ex, nameof(Log));
             }
         }
 
@@ -54,9 +56,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
                 }
                 Write(eventType, $"{method}: {message}");
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored
+                TraceFail(ex, nameof(Log));
             }
         }
 
@@ -78,9 +80,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
                 }
                 Write(TraceEventType.Information, $"{method}: {message}");
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored
+                TraceFail(ex, nameof(Log));
             }
         }
 
@@ -96,9 +98,9 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
                 var method = stackTrace.GetFrame(1)?.GetMethod()?.Name;
                 Write(eventType, $"{method}: {message}{argument.Format()}");
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored
+                TraceFail(ex, nameof(Log));
             }
         }
         
@@ -108,14 +110,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
             try
             {
                 var threadId = Thread.CurrentThread.ManagedThreadId;
-                var finalMessage = $"[{threadId, 4}] [{date}] [{_loggerName}] - {message}";
+                var finalMessage = $"[{threadId, 5}] [{date}] [{_loggerName}] - {message}";
                 _trace.TraceEvent(eventType, 0, finalMessage);
-                Console.WriteLine($@"{eventType.Format()}: {finalMessage}");
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored : Trace should never throw an exception
+                TraceFail(ex, nameof(Write));
             }
+        }
+
+        private static void TraceFail(Exception ex, string method)
+        {
+            var message = $"An error occur in {nameof(TracingService)}.{method}: {ex}";
+          
+            Trace.TraceError($"Trace Error => {message}");
+            // ReSharper disable once LocalizableElement
+            Console.WriteLine($"Console Log => {message}");
         }
     }
 }

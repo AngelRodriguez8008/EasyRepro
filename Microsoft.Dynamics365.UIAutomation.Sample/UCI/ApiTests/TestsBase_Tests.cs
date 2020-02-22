@@ -50,13 +50,23 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI.ApiTests
         }
 
         [TestMethod]
-        public void Test_Traces_in_AzurePipeline()
+        public void WriteTraces_in_AzurePipeline()
         {
             trace.Log("Start");
             Console.WriteLine("Console.WriteLine");
             Trace.WriteLine("Trace.WriteLine");
             trace.Log("End");
-            Assert.Fail("This test print comments");
+            Assert.Inconclusive("Check that this test is printing the traces properly");
+        }
+        
+        [TestMethod]
+        public void WriteTraces_SecoundTest_DontWrite_ToTraceSource()
+        {
+            trace.Log("Start");
+            Console.WriteLine("Console.WriteLine");
+            Trace.WriteLine("Trace.WriteLine");
+            trace.Log("End");
+            Assert.Inconclusive("Check that this test is printing the traces properly");
         }
     }
 }
