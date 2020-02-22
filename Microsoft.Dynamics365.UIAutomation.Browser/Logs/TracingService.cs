@@ -62,7 +62,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
             }
         }
 
-        // <summary>
+        /// <summary>
         /// Log Message to Trace, include Caller Method Name (safe if trace is null)
         /// </summary>
         public void Log(string message, params object[] arguments)

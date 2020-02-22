@@ -19,19 +19,19 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI
         protected readonly SecureString _password = ConfigurationManager.AppSettings["OnlinePassword"]?.ToSecureString();
         protected readonly SecureString _mfaSecrectKey = ConfigurationManager.AppSettings["MfaSecrectKey"]?.ToSecureString();
         protected readonly TracingService trace;
-        
+
         protected XrmApp _xrmApp;
         protected WebClient _client;
 
         public TestContext TestContext { get; set; } // VSTest fulfill this property before run each test, remove for NUnit
-        public  virtual string CurrentTestName => TestContext.TestName; // NUnit => (replace or override this method) TestContext.CurrentContext.Test.Name
+        public  virtual string CurrentTestName => TestContext.TestName; // NUnit => replace or override this method with: TestContext.CurrentContext.Test.Name
 
         protected TestsBase()
         {
             trace = new TracingService(GetType(), Constants.DefaultTraceSource);
             trace.Log("Init Tracing Service - Success");
         }
-
+        
         public virtual void InitTest()
         {
             try
