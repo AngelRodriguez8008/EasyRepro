@@ -14,15 +14,19 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI
         protected readonly SecureString _username = ConfigurationManager.AppSettings["OnlineUsername"]?.ToSecureString();
         protected readonly SecureString _password = ConfigurationManager.AppSettings["OnlinePassword"]?.ToSecureString();
         protected readonly SecureString _mfaSecrectKey = ConfigurationManager.AppSettings["MfaSecrectKey"]?.ToSecureString();
+        protected readonly TracingService trace;
   
-        private TracingService _trace;
-        protected TracingService trace => _trace ?? (_trace = new TracingService(GetType(), "BrowserAutomation"));
-
         protected XrmApp _xrmApp;
         protected WebClient _client;
-      
-        public TestContext TestContext { get; set; }
         
+        public TestContext TestContext { get; set; }
+
+        protected TestsBase()
+        {
+            trace = new TracingService(GetType(), Constants.DefaultTraceSource);
+            trace.Log("Init Tracing Service");
+        }
+
         public virtual void InitTest()
         {
             try
