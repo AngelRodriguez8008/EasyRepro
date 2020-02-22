@@ -14,17 +14,22 @@ namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI
         protected readonly SecureString _username = ConfigurationManager.AppSettings["OnlineUsername"]?.ToSecureString();
         protected readonly SecureString _password = ConfigurationManager.AppSettings["OnlinePassword"]?.ToSecureString();
         protected readonly SecureString _mfaSecrectKey = ConfigurationManager.AppSettings["MfaSecrectKey"]?.ToSecureString();
-        protected readonly TracingService trace;
   
+        private TracingService _trace;
+        protected TracingService trace => _trace ?? (_trace = new TracingService(GetType(), Constants.DefaultTraceSource));
+
         protected XrmApp _xrmApp;
         protected WebClient _client;
-        
-        public TestContext TestContext { get; set; }
+        private TestContext _testContext;
 
-        protected TestsBase()
+        public TestContext TestContext
         {
-            trace = new TracingService(GetType(), Constants.DefaultTraceSource);
-            trace.Log("Init Tracing Service");
+            get => _testContext;
+            set
+            {
+                trace.Log($"{value?.FullyQualifiedTestClassName} -> {value?.TestName}");
+                _testContext = value;
+            }
         }
 
         public virtual void InitTest()
