@@ -110,6 +110,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Browser.Logs
                 var threadId = Thread.CurrentThread.ManagedThreadId;
                 var finalMessage = $"[{threadId, 4}] [{date}] [{_loggerName}] - {message}";
                 _trace.TraceEvent(eventType, 0, finalMessage);
+                Console.WriteLine($@"{eventType.Format()}: {finalMessage}");
             }
             catch
             {
