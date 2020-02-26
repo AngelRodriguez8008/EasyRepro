@@ -2419,7 +2419,7 @@ namespace Microsoft.Dynamics365.UIAutomation.Api.UCI
         {
             var controlName = controls.First().Name;
             var xpathToExistingValues = By.XPath(AppElements.Xpath[AppReference.Entity.LookupFieldExistingValue].Replace("[NAME]", controlName));
-            var existingValues = fieldContainer.FindElements(xpathToExistingValues);
+            var existingValues = fieldContainer.WaitUntil(d => d.FindElements(xpathToExistingValues), 2.Seconds());
 
             var xpathToExpandButton = By.XPath(AppElements.Xpath[AppReference.Entity.LookupFieldExpandCollapseButton].Replace("[NAME]", controlName));
             bool expandButtonFound = fieldContainer.TryFindElement(xpathToExpandButton, out var expandButton);

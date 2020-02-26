@@ -3,8 +3,6 @@
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Dynamics365.UIAutomation.Api.UCI;
-using Microsoft.Dynamics365.UIAutomation.Browser;
-
 
 namespace Microsoft.Dynamics365.UIAutomation.Sample.UCI
 {
